@@ -68,17 +68,20 @@ class YFinanceChains:
                 return float(price)
         except Exception:
             pass
-        try:
-            hist = ticker.history(period="2d")
-            if not hist.empty:
-                return float(hist["Close"].iloc[-1])
-        except Exception:
-            pass
+        for attempt in range(self.retries):
+            try:
+                hist = ticker.history(period="1d")
+                if not hist.empty:
+                    return float(hist["Close"].iloc[-1])
+            except Exception:
+                if attempt < self.retries - 1:
+                    time.sleep(2 ** attempt)
         raise ChainFetchError(f"Could not get spot price for {symbol}")
 
     def fetch(self, symbol: str, asof: date, max_dte: int) -> tuple[float, list[OptionQuote]]:
         ticker = self._get_ticker(symbol)
         spot = self._get_spot(ticker, symbol)
+        log.debug("yfinance OI updates once daily from the previous session; using it for GEX walls")
 
         try:
             expirations = ticker.options  # list of "YYYY-MM-DD"

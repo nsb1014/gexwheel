@@ -1,4 +1,4 @@
-"""Reddit mention counts. TODO(sonnet): implement fetch_apewisdom (+ optional PRAW).
+r"""Reddit mention counts. TODO(sonnet): implement fetch_apewisdom (+ optional PRAW).
 
 fetch_apewisdom(filter_name, pages, asof) -> list[MentionRecord]
   * GET https://apewisdom.io/api/v1.0/filter/{filter_name}/page/{n}/
@@ -28,16 +28,21 @@ from __future__ import annotations
 import logging
 import re
 import time
-from datetime import date
+from collections import Counter
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import requests
 
+from .. import db
 from ..models import MentionRecord
 
 log = logging.getLogger(__name__)
 
 APEWISDOM_URL = "https://apewisdom.io/api/v1.0/filter/{flt}/page/{page}/"
 _TICKER_RE = re.compile(r'^[A-Z]{1,5}$')
+_CASHTAG_RE = re.compile(r"\$([A-Z]{1,5})\b")
+_BARE_RE = re.compile(r"(?<!\$)\b[A-Z]{1,5}\b")
 
 
 def _get_with_retry(url: str, retries: int = 3, timeout: int = 15) -> dict:
@@ -115,4 +120,89 @@ def fetch_apewisdom(filter_name: str, pages: int, asof: date) -> list[MentionRec
 
 
 def fetch_praw(cfg: dict, asof: date) -> list[MentionRecord]:
-    raise NotImplementedError("TODO: optional fallback, implement last")
+    """Fetch noisy Reddit mention counts through PRAW for known tickers and cashtags."""
+    try:
+        import praw
+    except Exception as exc:
+        raise MentionFetchError(f"praw import failed: {exc}") from exc
+
+    known_symbols = _known_symbols(cfg)
+    praw_cfg = cfg["reddit"].get("praw", {})
+    tz = ZoneInfo(cfg.get("timezone", "America/New_York"))
+    counts: Counter[str] = Counter()
+
+    posts = _praw_posts_with_retry(praw, praw_cfg)
+
+    try:
+        for post in posts:
+            if _created_date(getattr(post, "created_utc", None), tz) != asof:
+                continue
+            _count_text(counts, f"{getattr(post, 'title', '')} {getattr(post, 'selftext', '')}", known_symbols)
+            comments = getattr(post, "comments", None)
+            if comments is None:
+                continue
+            try:
+                comments.replace_more(limit=0)
+                for comment in comments.list():
+                    if _created_date(getattr(comment, "created_utc", None), tz) == asof:
+                        _count_text(counts, getattr(comment, "body", ""), known_symbols)
+            except Exception as exc:
+                log.debug("praw comments skipped: %s", exc)
+    except Exception as exc:
+        raise MentionFetchError(f"praw fetch failed: {exc}") from exc
+
+    records = [
+        MentionRecord(symbol=symbol, asof=asof, mentions=count, source="praw")
+        for symbol, count in counts.items()
+        if count > 0
+    ]
+    log.info("praw: %d unique tickers fetched for %s", len(records), asof)
+    return records
+
+
+def _praw_posts_with_retry(praw_module, praw_cfg: dict, retries: int = 3) -> list:
+    for attempt in range(retries):
+        try:
+            reddit = praw_module.Reddit(
+                client_id=praw_cfg.get("client_id"),
+                client_secret=praw_cfg.get("client_secret"),
+                user_agent=praw_cfg.get("user_agent", "gexwheel/0.1"),
+                requestor_kwargs={"timeout": 15},
+            )
+            return list(reddit.subreddit("wallstreetbets").new(limit=500))
+        except Exception as exc:
+            if attempt == retries - 1:
+                raise MentionFetchError(f"praw setup/listing failed: {exc}") from exc
+            sleep = 2 ** attempt
+            log.warning("praw listing attempt %d failed (%s), retrying in %ds", attempt + 1, exc, sleep)
+            time.sleep(sleep)
+    return []
+
+
+def _known_symbols(cfg: dict) -> set[str]:
+    db_path = cfg.get("db_path")
+    if not db_path:
+        return set()
+    conn = db.connect(db_path)
+    try:
+        rows = conn.execute("SELECT symbol FROM tickers WHERE excluded=0").fetchall()
+        return {r["symbol"].upper() for r in rows if _TICKER_RE.match(r["symbol"].upper())}
+    finally:
+        conn.close()
+
+
+def _created_date(created_utc: float | None, tz: ZoneInfo) -> date | None:
+    if created_utc is None:
+        return None
+    return datetime.fromtimestamp(created_utc, tz).date()
+
+
+def _count_text(counts: Counter[str], text: str, known_symbols: set[str]) -> None:
+    for raw in _CASHTAG_RE.findall(text or ""):
+        symbol = raw.upper().strip()
+        if _TICKER_RE.match(symbol):
+            counts[symbol] += 1
+    for raw in _BARE_RE.findall(text or ""):
+        symbol = raw.upper().strip()
+        if symbol in known_symbols:
+            counts[symbol] += 1

@@ -49,7 +49,7 @@ def run_discovery(conn: sqlite3.Connection, cfg: dict, asof: date) -> list[Veloc
         except MentionFetchError as exc:
             log.error("apewisdom fetch failed: %s", exc)
 
-    if not records and source == "praw":
+    if not records and source in ("praw", "both"):
         try:
             from ..data.mentions import fetch_praw
             records = fetch_praw(cfg, asof)

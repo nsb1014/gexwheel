@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from gexwheel.alerts.discord import send_alerts
+from gexwheel.alerts.discord import format_card, send_alerts
 from gexwheel.models import AlertCard
 
 
@@ -42,3 +42,17 @@ def test_send_alerts_returns_empty_when_all_chunks_fail():
 
     with patch("gexwheel.alerts.discord._post", return_value=False):
         assert send_alerts(cards, cfg) == []
+
+
+def test_format_card_uses_dash_for_missing_wall_fields():
+    card = _card("AAA", 90)
+    card.put_wall = None
+    card.call_wall = None
+    card.zero_gamma = None
+
+    embed = format_card(card)
+    fields = {field["name"]: field["value"] for field in embed["fields"]}
+
+    assert fields["Put wall"] == "—"
+    assert fields["Call wall"] == "—"
+    assert fields["Zero gamma"] == "—"

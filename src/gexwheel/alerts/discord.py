@@ -69,9 +69,9 @@ def format_card(card: AlertCard) -> dict:
         "color": color,
         "fields": [
             {"name": "Spot",        "value": _fmt_val(card.spot),       "inline": True},
-            {"name": "Put wall",    "value": _fmt_val(card.put_wall),   "inline": True},
-            {"name": "Call wall",   "value": _fmt_val(card.call_wall),  "inline": True},
-            {"name": "Zero gamma",  "value": _fmt_val(card.zero_gamma), "inline": True},
+            {"name": "Put wall",    "value": _fmt_val(card.put_wall, fallback="—"),   "inline": True},
+            {"name": "Call wall",   "value": _fmt_val(card.call_wall, fallback="—"),  "inline": True},
+            {"name": "Zero gamma",  "value": _fmt_val(card.zero_gamma, fallback="—"), "inline": True},
             {"name": "IV rank",     "value": ivr_str,                   "inline": True},
             {"name": "VRP",         "value": vrp_str,                   "inline": True},
             {"name": "Suggested",   "value": card.suggested_entry,      "inline": False},
