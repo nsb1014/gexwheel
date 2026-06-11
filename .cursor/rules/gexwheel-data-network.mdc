@@ -1,0 +1,31 @@
+---
+description: Network, timezone, and data-source conventions for gexwheel
+globs: src/gexwheel/data/**/*.py,src/gexwheel/jobs/**/*.py
+alwaysApply: false
+---
+
+# Data & network rules
+
+## Resilience
+
+- Use stdlib `logging` (not print) for operational output.
+- Set **timeouts** on every HTTP/request call.
+- Retry with **exponential backoff** on transient failures.
+- **Never let one symbol's failure kill a batch run** — log, skip, continue.
+
+## Timezone
+
+All dates flow through `zoneinfo.ZoneInfo(cfg["timezone"])`. Never use bare `date.today()`.
+
+## yfinance
+
+- Respect `request_sleep_s` between **every** `option_chain()` call, not just per symbol.
+- Off-hours chains may have bid/ask of 0 — filters already define `no_quote` FAIL behavior; do not special-case elsewhere.
+
+## ApeWisdom
+
+Field names are unofficial. On first integration, log `results[0].keys()` at DEBUG and map fields in **one place** only (`data/mentions.py`).
+
+## SQLite
+
+Single writer — no threading. Jobs are serialized via systemd timers.

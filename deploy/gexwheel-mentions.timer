@@ -1,0 +1,11 @@
+# Place in ~/.config/systemd/user/  - fires the quadlet-generated service.
+[Unit]
+Description=Run gexwheel mention scan daily (weekends too - baselines need history)
+
+[Timer]
+OnCalendar=*-*-* 07:00:00 America/New_York
+Persistent=true
+Unit=gexwheel-mentions.service
+
+[Install]
+WantedBy=timers.target

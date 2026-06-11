@@ -1,0 +1,24 @@
+---
+description: Python style and testing conventions for gexwheel
+globs: "**/*.py"
+alwaysApply: false
+---
+
+# Python conventions
+
+## Layout
+
+- Source: `src/gexwheel/` (run tests with `PYTHONPATH=src`).
+- Config access: `cfg["filters"]["price_min"]` pattern via `config.load_config()`.
+- Shared types live in `models.py` — import from there, do not duplicate dataclasses.
+
+## Tests
+
+- Place tests in `tests/`; use fixtures described in filter test docstrings when unskipping `test_filters.py`.
+- Prefer known-answer unit tests (see `tests/test_gex.py`, `tests/test_velocity.py`).
+- Write step-specific tests called out in IMPLEMENTATION_GUIDE.md (e.g. vol: constant series → 0 realized vol).
+
+## Style
+
+- Match existing modules: `from __future__ import annotations`, type hints, minimal comments.
+- Keep changes scoped to the current build-order step — no drive-by refactors.

@@ -1,0 +1,31 @@
+---
+description: gexwheel frozen contracts, specs, and verification workflow
+alwaysApply: true
+---
+
+# gexwheel core rules
+
+Read [IMPLEMENTATION_GUIDE.md](../../IMPLEMENTATION_GUIDE.md) and [AGENTS.md](../../AGENTS.md) before implementing.
+
+## Frozen contracts
+
+- Do **not** rename fields in `models.py` or change `schema.sql`.
+- Do **not** change public function/class signatures in stub modules — tests and DB rows depend on them.
+
+## Spec source
+
+Each TODO module's **module docstring is the spec**. Implement exactly that. If ambiguous, choose simpler behavior and add `# NOTE:`.
+
+## Verification
+
+After every change:
+
+```bash
+PYTHONPATH=src pytest
+```
+
+Follow the build-order **Verify by** column in IMPLEMENTATION_GUIDE.md before starting the next step.
+
+## Dependencies
+
+No new packages beyond `requirements.txt` without strong reason and explicit approval.

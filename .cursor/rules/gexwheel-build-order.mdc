@@ -1,0 +1,25 @@
+---
+description: gexwheel implementation build order and module status
+alwaysApply: true
+---
+
+# Build order
+
+Implement in this order; each step is independently testable:
+
+| # | Module | Verify |
+|---|--------|--------|
+| 1 | `analytics/vol.py` | unit tests: const series vol=0; iv_rank max≈100 |
+| 2 | `data/mentions.py` | fetch snippet + DEBUG log raw keys |
+| 3 | `screening/discovery.py` | temp DB, 6 days fake mentions → trigger list |
+| 4 | `jobs/mentions_daily.py` | `python -m gexwheel mentions` → mentions table |
+| 5 | `data/chains.py` | fetch SMR; GEX profile sane walls |
+| 6 | `data/prices.py` | closes≥60; sma50 < spot for uptrend name |
+| 7 | `screening/filters.py` | unskip `tests/test_filters.py`, pass all |
+| 8 | `alerts/scoring.py` | persistence gate + proximity edge cases |
+| 9 | `alerts/discord.py` | `python -m gexwheel test-discord` |
+| 10 | `jobs/morning.py` | E2E dry run, 2–3 seeded watchlist tickers |
+
+**Already done:** `gex.py`, `velocity.py`, `models.py`, `db.py`, `config.py`, `__main__.py`.
+
+Do not skip ahead — later steps depend on earlier ones.
