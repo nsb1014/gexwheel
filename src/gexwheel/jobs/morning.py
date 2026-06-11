@@ -1,4 +1,4 @@
-"""Weekday pre-market job (~07:15 ET). TODO(sonnet): implement run().
+"""Weekday pre-market job (~07:15 ET).
 
 run(cfg) -> None
   Candidates = union of:

@@ -1,4 +1,4 @@
-"""Discord webhook delivery. TODO(sonnet): implement send_alerts + format_card.
+"""Discord webhook delivery.
 
 format_card(card: AlertCard) -> dict
   One Discord embed dict. Target layout:

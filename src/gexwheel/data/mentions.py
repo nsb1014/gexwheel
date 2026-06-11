@@ -1,4 +1,4 @@
-r"""Reddit mention counts. TODO(sonnet): implement fetch_apewisdom (+ optional PRAW).
+r"""Reddit mention counts from ApeWisdom and optional PRAW fallback.
 
 fetch_apewisdom(filter_name, pages, asof) -> list[MentionRecord]
   * GET https://apewisdom.io/api/v1.0/filter/{filter_name}/page/{n}/

@@ -32,11 +32,14 @@ Key design facts:
   rules (max assignment per ticker etc.) live in your head, not in code - the
   footer of every alert says so.
 
-## Status / build order
-Reference modules (DONE, tested): `analytics/gex.py`, `analytics/velocity.py`,
-`models.py`, `db.py`, `config.py`, `__main__.py`.
-To implement (specs in each module docstring, order matters):
-see **IMPLEMENTATION_GUIDE.md**.
+## Status
+The core pipeline modules are implemented and covered by local tests:
+analytics, data adapters, discovery, filters, alert scoring/Discord delivery,
+jobs, config, models, migrations, and SQLite helpers.
+
+The historical build order and live smoke-test checklist are documented in
+**IMPLEMENTATION_GUIDE.md**. Live checks still require configured external
+services such as ApeWisdom/yfinance/Discord.
 
 ## Dev quickstart
 ```bash

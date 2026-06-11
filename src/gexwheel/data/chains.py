@@ -1,4 +1,4 @@
-"""Option chain fetching. TODO(sonnet): implement YFinanceChains.
+"""Option chain fetching.
 
 Interface contract (the rest of the pipeline depends ONLY on this):
 

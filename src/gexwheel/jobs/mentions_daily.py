@@ -1,5 +1,5 @@
 """Daily Reddit scan job - runs EVERY day incl. weekends (baselines need
-continuous history). TODO(sonnet): implement run().
+continuous history).
 
 run(cfg) -> None
   1. asof = today in cfg['timezone'] (zoneinfo, not naive date.today()).

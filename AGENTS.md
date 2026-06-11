@@ -22,14 +22,14 @@ spot approaches a persistent put wall.
 - **Dates:** always use `zoneinfo.ZoneInfo(cfg['timezone'])` — never bare `date.today()` (containers run UTC).
 - **SQLite:** single writer; jobs run serially via timers — do not add threading.
 
-## Done vs TODO
+## Implementation status
 
 | Status | Modules |
 |--------|---------|
-| DONE (tested) | `analytics/gex.py`, `analytics/velocity.py`, `models.py`, `db.py`, `config.py`, `__main__.py` |
-| TODO (spec in docstring) | `analytics/vol.py`, `data/mentions.py`, `data/chains.py`, `data/prices.py`, `screening/discovery.py`, `screening/filters.py`, `alerts/scoring.py`, `alerts/discord.py`, `jobs/mentions_daily.py`, `jobs/morning.py` |
+| IMPLEMENTED (local tests) | `analytics/gex.py`, `analytics/velocity.py`, `analytics/vol.py`, `models.py`, `db.py`, `config.py`, `__main__.py`, `data/mentions.py`, `data/chains.py`, `data/prices.py`, `screening/discovery.py`, `screening/filters.py`, `alerts/scoring.py`, `alerts/discord.py`, `jobs/mentions_daily.py`, `jobs/morning.py` |
+| LIVE/ENV VERIFICATION | ApeWisdom/yfinance/Discord smoke checks from `IMPLEMENTATION_GUIDE.md` require configured external services. |
 
-Build order and verification commands: **IMPLEMENTATION_GUIDE.md**.
+Historical build order and verification commands: **IMPLEMENTATION_GUIDE.md**.
 
 ## Dev commands
 

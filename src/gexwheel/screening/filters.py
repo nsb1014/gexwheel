@@ -1,4 +1,4 @@
-"""Stage 2: the hard gate. TODO(sonnet): implement run_filters.
+"""Stage 2: the hard gate.
 
 run_filters(symbol, cfg, conn, *, spot, quotes, closes, gex_profile, asof,
             iv_rank_val, vrp_val) -> FilterReport

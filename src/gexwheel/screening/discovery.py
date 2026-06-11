@@ -1,4 +1,4 @@
-"""Stage 1: discovery. TODO(sonnet): implement run_discovery.
+"""Stage 1: discovery.
 
 run_discovery(conn, cfg, asof) -> list[VelocityResult]   (only triggered ones)
 
