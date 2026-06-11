@@ -44,10 +44,13 @@ from ..analytics import gex as gex_mod
 from ..analytics import vol as vol_mod
 from ..data.chains import ChainFetchError, make_chain_source
 from ..data.prices import PriceFetchError, daily_closes, next_earnings, sector
-from ..models import AlertCard
+from ..models import AlertCard, FilterReport
 from ..screening.filters import run_filters
 
 log = logging.getLogger(__name__)
+
+_DAILY_REMOVE_CHECKS = ("price_range", "sector", "not_blocklisted")
+_WEEKLY_PRUNE_CHECKS = ("price_range", "open_interest", "iv_rank", "vrp")
 
 
 def run(cfg: dict) -> None:
@@ -167,16 +170,7 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
     log.info("morning: %s filters passed=%s checks=%s", symbol, report.passed, report.checks)
 
     # Promote/demote watchlist membership
-    if symbol not in watchlist and report.passed:
-        gdb.watchlist_add(conn, symbol, asof, score=None)
-    elif symbol in watchlist:
-        structural_fail = any(
-            not report.checks.get(k, True)
-            for k in ("price_range", "sector", "not_blocklisted")
-        )
-        if structural_fail:
-            conn.execute("UPDATE watchlist SET status='removed' WHERE symbol=?", (symbol,))
-            log.info("morning: %s removed from watchlist (structural fail)", symbol)
+    _update_watchlist_membership(symbol, watchlist, report, conn, asof)
 
     # 7. Wall-break check
     if profile.put_wall is not None and spot < profile.put_wall:
@@ -218,6 +212,38 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
         )
         cards.append(card)
         log.info("morning: %s generated alert score=%.1f", symbol, card_score)
+
+
+def _update_watchlist_membership(symbol: str, watchlist: set[str], report: FilterReport,
+                                 conn, asof) -> None:
+    """Promote new passing names, remove active names that no longer meet durable gates."""
+    if symbol not in watchlist:
+        if report.passed:
+            gdb.watchlist_add(conn, symbol, asof, score=None)
+        return
+
+    failures = _failed_checks(report, _DAILY_REMOVE_CHECKS)
+    reason_prefix = "structural fail"
+
+    if not failures and asof.weekday() == 0:
+        if report.values.get("spread") == "no_quote":
+            return
+        failures = _failed_checks(report, _WEEKLY_PRUNE_CHECKS)
+        reason_prefix = "weekly prune"
+
+    if not failures:
+        return
+
+    note = f"{reason_prefix}: {', '.join(failures)}"
+    conn.execute(
+        "UPDATE watchlist SET status='removed', notes=? WHERE symbol=?",
+        (note, symbol),
+    )
+    log.info("morning: %s removed from watchlist (%s)", symbol, note)
+
+
+def _failed_checks(report: FilterReport, check_names: tuple[str, ...]) -> list[str]:
+    return [name for name in check_names if report.checks.get(name) is False]
 
 
 def _refresh_earnings(conn, symbol, asof):
