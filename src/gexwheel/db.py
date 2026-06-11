@@ -1,7 +1,7 @@
 """SQLite layer. FULLY IMPLEMENTED (thin by design - raw SQL, no ORM).
 
 Every function takes an open sqlite3.Connection so jobs control transactions.
-Schema is applied idempotently by connect().
+Schema bootstrap and migrations are applied idempotently by connect().
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from pathlib import Path
 from .models import GexProfile, MentionRecord
 
 _SCHEMA = Path(__file__).resolve().parents[2] / "schema.sql"
+_MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
 
 
 def connect(db_path: str) -> sqlite3.Connection:
@@ -20,7 +21,42 @@ def connect(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.executescript(_SCHEMA.read_text())
+    _apply_migrations(conn)
     return conn
+
+
+def _apply_migrations(conn: sqlite3.Connection, migrations_dir: Path = _MIGRATIONS) -> None:
+    """Apply unapplied SQL migrations in filename order."""
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS schema_migrations (
+               version TEXT PRIMARY KEY,
+               applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+           )"""
+    )
+    if not migrations_dir.exists():
+        conn.commit()
+        return
+
+    applied = {
+        r["version"]
+        for r in conn.execute("SELECT version FROM schema_migrations").fetchall()
+    }
+    for path in sorted(migrations_dir.glob("*.sql")):
+        version = path.stem
+        if version in applied:
+            continue
+        escaped_version = version.replace("'", "''")
+        try:
+            conn.executescript(
+                "BEGIN;\n"
+                f"{path.read_text()}\n"
+                f"INSERT INTO schema_migrations(version) VALUES ('{escaped_version}');\n"
+                "COMMIT;"
+            )
+        except Exception:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
 
 
 # ---------- mentions ----------
