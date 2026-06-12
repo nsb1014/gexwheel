@@ -5,8 +5,8 @@ from __future__ import annotations
 import math
 
 from tests.conftest import ASOF, EXP, SPOT
-from gexwheel.analytics.gex import bs_gamma, compute_profile, contract_gex
-from gexwheel.models import OptionQuote
+from gexwheel.analytics.gex import bs_gamma, compute_profile, contract_gex, put_wall_strength, wall_strength
+from gexwheel.models import GexProfile, OptionQuote
 
 
 def test_bs_gamma_known_value():
@@ -40,3 +40,37 @@ def test_walls_and_regime(synthetic_chain):
 def test_expired_and_far_options_excluded(synthetic_chain):
     p = compute_profile("TEST", synthetic_chain, SPOT, ASOF, max_dte=10)
     assert p.by_strike == {}  # only expiry is 30 DTE, outside max_dte=10
+
+
+def test_wall_strength_is_share_of_same_side_absolute_gex():
+    p = GexProfile(
+        symbol="TEST",
+        asof=ASOF,
+        spot=SPOT,
+        call_wall=110,
+        put_wall=90,
+        zero_gamma=None,
+        net_gex=600,
+        regime="positive",
+        by_strike={80: -100.0, 90: -300.0, 100: 200.0, 110: 600.0},
+    )
+
+    assert put_wall_strength(p) == 0.75
+    assert wall_strength(p, "call") == 0.75
+
+
+def test_wall_strength_is_none_when_wall_or_same_side_gex_missing():
+    p = GexProfile(
+        symbol="TEST",
+        asof=ASOF,
+        spot=SPOT,
+        call_wall=None,
+        put_wall=90,
+        zero_gamma=None,
+        net_gex=0,
+        regime="positive",
+        by_strike={90: 0.0},
+    )
+
+    assert put_wall_strength(p) is None
+    assert wall_strength(p, "call") is None

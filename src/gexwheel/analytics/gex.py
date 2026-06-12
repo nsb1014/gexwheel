@@ -58,6 +58,33 @@ def _net_gex_at_spot(quotes: list[OptionQuote], spot: float, asof: date, r: floa
     return sum(contract_gex(q, spot, asof, r) for q in quotes)
 
 
+def wall_strength(profile: GexProfile, kind: str) -> float | None:
+    """Wall GEX as share of same-side absolute strike GEX, 0-1."""
+    if kind == "call":
+        wall = profile.call_wall
+        side_values = [v for v in profile.by_strike.values() if v > 0]
+    elif kind == "put":
+        wall = profile.put_wall
+        side_values = [-v for v in profile.by_strike.values() if v < 0]
+    else:
+        raise ValueError("kind must be 'call' or 'put'")
+
+    if wall is None:
+        return None
+    wall_value = profile.by_strike.get(wall)
+    if wall_value is None:
+        return None
+    total = sum(side_values)
+    if total <= 0:
+        return None
+    return abs(wall_value) / total
+
+
+def put_wall_strength(profile: GexProfile) -> float | None:
+    """Put wall dominance as a 0-1 share of same-side absolute GEX."""
+    return wall_strength(profile, "put")
+
+
 def compute_profile(symbol: str, quotes: list[OptionQuote], spot: float, asof: date,
                     *, r: float = 0.045, max_dte: int = 60) -> GexProfile:
     """Aggregate a chain into a GexProfile. Filters to expiries within max_dte."""

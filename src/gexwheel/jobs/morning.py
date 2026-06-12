@@ -1,4 +1,4 @@
-"""Weekday pre-market job (~07:15 ET). TODO(sonnet): implement run().
+"""Weekday pre-market job (~07:15 ET).
 
 run(cfg) -> None
   Candidates = union of:
@@ -42,12 +42,16 @@ from ..alerts.scoring import score, should_alert
 from ..alerts.scoring import suggested_entry as make_entry
 from ..analytics import gex as gex_mod
 from ..analytics import vol as vol_mod
+from ..analytics.gex import put_wall_strength
 from ..data.chains import ChainFetchError, make_chain_source
 from ..data.prices import PriceFetchError, daily_closes, next_earnings, sector
-from ..models import AlertCard
+from ..models import AlertCard, FilterReport
 from ..screening.filters import run_filters
 
 log = logging.getLogger(__name__)
+
+_DAILY_REMOVE_CHECKS = ("price_range", "sector", "not_blocklisted")
+_WEEKLY_PRUNE_CHECKS = ("price_range", "open_interest", "iv_rank", "vrp")
 
 
 def run(cfg: dict) -> None:
@@ -76,12 +80,13 @@ def run(cfg: dict) -> None:
              len(candidates), len(watchlist), len(discovery_rows))
 
     cards: list[AlertCard] = []
+    alert_payloads: dict[tuple[str, str], dict] = {}
 
     for symbol in candidates:
         try:
             _process_symbol(
                 symbol, asof, conn, chain_src, cfg, data_cfg,
-                cooldown_days, watchlist, cards
+                cooldown_days, watchlist, cards, alert_payloads
             )
         except Exception as exc:
             log.error("morning: unhandled error for %s: %s", symbol, exc, exc_info=True)
@@ -95,10 +100,14 @@ def run(cfg: dict) -> None:
         now_iso = datetime.now(tz).isoformat()
         for card in top_cards:
             delivered = (card.symbol, card.alert_type) in sent_keys
-            gdb.log_alert(conn, card.symbol, asof, card.alert_type,
-                          {"spot": card.spot, "put_wall": card.put_wall,
-                           "score": card.score, "suggested": card.suggested_entry},
-                          now_iso if delivered else None)
+            payload = alert_payloads.get(
+                (card.symbol, card.alert_type),
+                _alert_payload(card, put_wall_strength_val=None),
+            )
+            gdb.log_alert(
+                conn, card.symbol, asof, card.alert_type, payload,
+                now_iso if delivered else None,
+            )
         conn.commit()
         log.info("morning: sent %d/%d alerts", len(sent_cards), len(top_cards))
     else:
@@ -109,7 +118,7 @@ def run(cfg: dict) -> None:
 
 
 def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
-                    cooldown_days, watchlist, cards):
+                    cooldown_days, watchlist, cards, alert_payloads):
     """Per-symbol processing block. All exceptions bubble to the caller's handler."""
 
     # 1. Fetch chain
@@ -167,16 +176,7 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
     log.info("morning: %s filters passed=%s checks=%s", symbol, report.passed, report.checks)
 
     # Promote/demote watchlist membership
-    if symbol not in watchlist and report.passed:
-        gdb.watchlist_add(conn, symbol, asof, score=None)
-    elif symbol in watchlist:
-        structural_fail = any(
-            not report.checks.get(k, True)
-            for k in ("price_range", "sector", "not_blocklisted")
-        )
-        if structural_fail:
-            conn.execute("UPDATE watchlist SET status='removed' WHERE symbol=?", (symbol,))
-            log.info("morning: %s removed from watchlist (structural fail)", symbol)
+    _update_watchlist_membership(symbol, watchlist, report, conn, asof)
 
     # 7. Wall-break check
     if profile.put_wall is not None and spot < profile.put_wall:
@@ -202,6 +202,7 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
                 pass
 
         card_score = score(profile, ivr, vrp, vel_ratio)
+        strength = put_wall_strength(profile)
         card = AlertCard(
             symbol=symbol,
             alert_type="put_wall_entry",
@@ -214,10 +215,68 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
             vrp=vrp,
             score=card_score,
             suggested_entry=make_entry(profile),
-            notes="2d wall" if report.checks.get("regime") else "",
+            notes=_alert_notes(profile, report),
         )
         cards.append(card)
+        alert_payloads[(card.symbol, card.alert_type)] = _alert_payload(
+            card, put_wall_strength_val=strength
+        )
         log.info("morning: %s generated alert score=%.1f", symbol, card_score)
+
+
+def _update_watchlist_membership(symbol: str, watchlist: set[str], report: FilterReport,
+                                 conn, asof) -> None:
+    """Promote new passing names, remove active names that no longer meet durable gates."""
+    if symbol not in watchlist:
+        if report.passed:
+            gdb.watchlist_add(conn, symbol, asof, score=None)
+        return
+
+    failures = _failed_checks(report, _DAILY_REMOVE_CHECKS)
+    reason_prefix = "structural fail"
+
+    if not failures and asof.weekday() == 0:
+        if report.values.get("spread") == "no_quote":
+            return
+        failures = _failed_checks(report, _WEEKLY_PRUNE_CHECKS)
+        reason_prefix = "weekly prune"
+
+    if not failures:
+        return
+
+    note = f"{reason_prefix}: {', '.join(failures)}"
+    conn.execute(
+        "UPDATE watchlist SET status='removed', notes=? WHERE symbol=?",
+        (note, symbol),
+    )
+    log.info("morning: %s removed from watchlist (%s)", symbol, note)
+
+
+def _failed_checks(report: FilterReport, check_names: tuple[str, ...]) -> list[str]:
+    return [name for name in check_names if report.checks.get(name) is False]
+
+
+def _alert_notes(profile, report: FilterReport) -> str:
+    notes = []
+    if report.checks.get("regime"):
+        notes.append("2d wall")
+    strength = put_wall_strength(profile)
+    if strength is not None:
+        notes.append(f"put wall strength {strength:.0%}")
+    return " · ".join(notes)
+
+
+def _alert_payload(card: AlertCard, put_wall_strength_val: float | None) -> dict:
+    payload = {
+        "spot": card.spot,
+        "put_wall": card.put_wall,
+        "score": card.score,
+        "suggested": card.suggested_entry,
+        "notes": card.notes,
+    }
+    if put_wall_strength_val is not None:
+        payload["put_wall_strength"] = round(put_wall_strength_val, 4)
+    return payload
 
 
 def _refresh_earnings(conn, symbol, asof):

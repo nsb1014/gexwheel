@@ -1,6 +1,6 @@
 """Volatility stats: ATM IV, IV rank, realized vol, VRP.
 
-TODO(sonnet): implement all three functions. Specs:
+Function specs:
 
 realized_vol(closes, window=20) -> float
   * closes: list[float], oldest first, daily closes (>= window+1 values required;

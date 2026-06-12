@@ -1,4 +1,4 @@
-"""Price history + simple derived stats. TODO(sonnet): implement via yfinance.
+"""Price history + simple derived stats via yfinance.
 
 daily_closes(symbol, lookback_days=120) -> list[float]
   * yfinance.Ticker(symbol).history(period=f"{lookback_days}d")["Close"]

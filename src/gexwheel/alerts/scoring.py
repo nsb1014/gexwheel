@@ -1,4 +1,4 @@
-"""Setup scoring + alert decision. TODO(sonnet): implement both functions.
+"""Setup scoring + alert decision.
 
 should_alert(profile, cfg, conn, asof) -> bool
   * profile.put_wall is not None

@@ -15,10 +15,10 @@ data:
   request_retries: 3
 
 reddit:
-  source: apewisdom              # 'apewisdom' | 'praw'
+  source: apewisdom              # 'apewisdom' | 'praw' | 'both' (ApeWisdom first, PRAW fallback)
   apewisdom_filter: wallstreetbets   # also: 'all', 'stocks', 'options'
   apewisdom_pages: 2             # ~100 tickers per page
-  praw:                          # only needed if source == praw
+  praw:                          # needed if source == praw or source == both fallback should work
     client_id: ""
     client_secret: ""
     user_agent: "gexwheel/0.1"
