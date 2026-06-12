@@ -104,6 +104,10 @@ python -m gexwheel show SYMBOL    # dump latest stored GEX snapshot
 Contributor ground rules are in [AGENTS.md](./AGENTS.md); deployment details
 in [deploy/INSTALL.md](./deploy/INSTALL.md).
 
+## License
+
+MIT - see [LICENSE](./LICENSE).
+
 ## Disclaimer
 
 This software is provided for educational and informational purposes only. It
