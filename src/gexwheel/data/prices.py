@@ -23,7 +23,9 @@ sector(symbol) -> str | None
 from __future__ import annotations
 
 import logging
+import time
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import yfinance as yf
 
@@ -34,11 +36,28 @@ class PriceFetchError(RuntimeError):
     pass
 
 
+# NOTE: next_earnings()/daily_closes() signatures are frozen (no cfg access),
+# so the market timezone is pinned here; schema.sql stores all dates in
+# America/New_York trading-day terms.
+_MARKET_TZ = ZoneInfo("America/New_York")
+
+
+def _history_with_retry(ticker, period: str, retries: int = 3):
+    """ticker.history() with exponential backoff (1s, 2s) on transient failures."""
+    for attempt in range(retries):
+        try:
+            return ticker.history(period=period)
+        except Exception:
+            if attempt == retries - 1:
+                raise
+            time.sleep(2 ** attempt)
+
+
 def daily_closes(symbol: str, lookback_days: int = 120) -> list[float]:
     """Return daily closes oldest-first, raises PriceFetchError if < 60 rows."""
     try:
         ticker = yf.Ticker(symbol)
-        hist = ticker.history(period=f"{lookback_days}d")
+        hist = _history_with_retry(ticker, f"{lookback_days}d")
     except Exception as exc:
         raise PriceFetchError(f"price history failed for {symbol}: {exc}") from exc
 
@@ -72,7 +91,7 @@ def next_earnings(symbol: str) -> date | None:
                 # may be a list or single value
                 if not isinstance(ed, (list, tuple)):
                     ed = [ed]
-                today = datetime.utcnow().date()
+                today = datetime.now(_MARKET_TZ).date()
                 future = sorted(
                     [d.date() if hasattr(d, "date") else d for d in ed
                      if (d.date() if hasattr(d, "date") else d) > today]
@@ -83,7 +102,7 @@ def next_earnings(symbol: str) -> date | None:
         # fallback: get_earnings_dates
         eds = ticker.get_earnings_dates(limit=8)
         if eds is not None and not eds.empty:
-            today = datetime.utcnow().date()
+            today = datetime.now(_MARKET_TZ).date()
             future_dates = sorted([
                 idx.date() if hasattr(idx, "date") else idx
                 for idx in eds.index
