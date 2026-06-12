@@ -66,13 +66,10 @@ class YFinanceChains:
         self.retries = request_retries
 
     def _get_ticker(self, symbol: str):
-        for attempt in range(self.retries):
-            try:
-                return yf.Ticker(symbol)
-            except Exception as exc:
-                if attempt == self.retries - 1:
-                    raise ChainFetchError(f"Ticker({symbol}) failed: {exc}") from exc
-                time.sleep(2 ** attempt)
+        # yf.Ticker is a lazy constructor (no network I/O); real failures
+        # surface later on fast_info/options/option_chain access, which
+        # have their own retry handling.
+        return yf.Ticker(symbol)
 
     def _get_spot(self, ticker, symbol: str) -> float:
         try:
