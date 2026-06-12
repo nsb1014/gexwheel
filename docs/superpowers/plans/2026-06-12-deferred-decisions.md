@@ -1,5 +1,8 @@
 # Deferred Decisions (need owner sign-off — do NOT implement without it)
 
+> **STATUS: OPEN** — sole remaining track from the 2026-06-12 repo review.
+> All four executable remediation plans are complete (see [README.md](./README.md)).
+
 These review findings touch frozen contracts (`models.py` fields, `schema.sql`,
 public signatures) or require a product decision. They are documented here so
 they are not lost and not accidentally "fixed" by an agent. Each entry states

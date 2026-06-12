@@ -1,5 +1,7 @@
 # Morning Job Fixes Implementation Plan
 
+> **STATUS: COMPLETE** — merged to `main` via [PR #4](https://github.com/nsb1014/gexwheel/pull/4). Do not re-implement; kept for traceability.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix the mention-velocity query in `jobs/morning.py` so it never mixes ApeWisdom and PRAW baselines, remove the duplicated sort/truncate logic and dead code in the alert-send path, and drop unused imports.

@@ -1,5 +1,7 @@
 # Consistency Cleanups Implementation Plan
 
+> **STATUS: COMPLETE** — merged to `main` via [PR #5](https://github.com/nsb1014/gexwheel/pull/5). Do not re-implement; kept for traceability.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Align `scoring.py`, `filters.py`, `data/mentions.py`, and `data/prices.py` with the repo's own stated rules (timezone discipline, retry/backoff on network calls, single-source config defaults) and fix small internal inconsistencies found in review.

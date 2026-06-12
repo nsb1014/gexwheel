@@ -1,5 +1,7 @@
 # Docs and Dependency Cleanup Implementation Plan
 
+> **STATUS: COMPLETE** — merged to `main` via [PR #6](https://github.com/nsb1014/gexwheel/pull/6). Do not re-implement; kept for traceability.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Retire stale build-order process scaffolding that actively misdirects agents, clarify which `requirements.txt` entries are actually used directly, and fix the `jobs/mentions_daily.py` docstring/implementation mismatch about transaction ownership.
