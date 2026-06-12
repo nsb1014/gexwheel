@@ -1,13 +1,16 @@
-# Core
-pandas>=2.0
-numpy>=1.26
+# Direct dependencies
 requests>=2.31
 PyYAML>=6.0
-python-dateutil>=2.8
 
 # Data sources
 yfinance>=0.2.50        # option chains + price history (free tier)
 praw>=7.7               # OPTIONAL: Reddit API fallback for mention counts
+
+# Transitive version floors (pulled in by yfinance; nothing in src/ imports
+# these directly — pinned only to keep resolver behavior predictable)
+pandas>=2.0
+numpy>=1.26
+python-dateutil>=2.8
 
 # Dev
 pytest>=8.0
