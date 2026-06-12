@@ -93,19 +93,19 @@ def run(cfg: dict) -> None:
 
     # Send alerts
     if cards:
-        max_cards = cfg["discord"]["max_alerts_per_run"]
+        # send_alerts sorts and truncates to max_alerts_per_run internally;
+        # truncate here too so only attempted cards are logged (re-sorting an
+        # already-truncated list inside send_alerts is a no-op).
+        max_cards = cfg["discord"].get("max_alerts_per_run", 8)
         top_cards = sorted(cards, key=lambda c: c.score, reverse=True)[:max_cards]
-        sent_cards = disc.send_alerts(cards, cfg)
+        sent_cards = disc.send_alerts(top_cards, cfg)
         sent_keys = {(c.symbol, c.alert_type) for c in sent_cards}
         now_iso = datetime.now(tz).isoformat()
         for card in top_cards:
             delivered = (card.symbol, card.alert_type) in sent_keys
-            payload = alert_payloads.get(
-                (card.symbol, card.alert_type),
-                _alert_payload(card, put_wall_strength_val=None),
-            )
             gdb.log_alert(
-                conn, card.symbol, asof, card.alert_type, payload,
+                conn, card.symbol, asof, card.alert_type,
+                alert_payloads[(card.symbol, card.alert_type)],
                 now_iso if delivered else None,
             )
         conn.commit()
@@ -187,19 +187,10 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
 
     # 8. Alert
     if report.passed and should_alert(profile, cfg, conn, asof):
-        vel_row = conn.execute(
-            """SELECT mentions, (SELECT AVG(mentions) FROM (
-                   SELECT mentions FROM mentions WHERE symbol=? AND date < ?
-                   ORDER BY date DESC LIMIT 7)) AS baseline
-               FROM mentions WHERE symbol=? AND date=?""",
-            (symbol, asof.isoformat(), symbol, asof.isoformat()),
-        ).fetchone()
-        vel_ratio = None
-        if vel_row and vel_row["baseline"]:
-            try:
-                vel_ratio = vel_row["mentions"] / vel_row["baseline"]
-            except (TypeError, ZeroDivisionError):
-                pass
+        # NOTE: velocity context follows the configured discovery source;
+        # 'both' falls back to apewisdom (the primary).
+        mention_source = "praw" if cfg["reddit"].get("source") == "praw" else "apewisdom"
+        vel_ratio = _velocity_ratio(conn, symbol, asof, mention_source)
 
         card_score = score(profile, ivr, vrp, vel_ratio)
         strength = put_wall_strength(profile)
@@ -254,6 +245,28 @@ def _update_watchlist_membership(symbol: str, watchlist: set[str], report: Filte
 
 def _failed_checks(report: FilterReport, check_names: tuple[str, ...]) -> list[str]:
     return [name for name in check_names if report.checks.get(name) is False]
+
+
+def _velocity_ratio(conn, symbol: str, asof, source: str) -> float | None:
+    """today's mentions / trailing-7-row average, single source only.
+
+    The mentions PK is (symbol, date, source); mixing sources would skew
+    the baseline (see data/mentions.py docstring).
+    """
+    row = conn.execute(
+        """SELECT mentions, (SELECT AVG(mentions) FROM (
+               SELECT mentions FROM mentions
+               WHERE symbol=? AND source=? AND date < ?
+               ORDER BY date DESC LIMIT 7)) AS baseline
+           FROM mentions WHERE symbol=? AND source=? AND date=?""",
+        (symbol, source, asof.isoformat(), symbol, source, asof.isoformat()),
+    ).fetchone()
+    if not row or not row["baseline"]:
+        return None
+    try:
+        return row["mentions"] / row["baseline"]
+    except (TypeError, ZeroDivisionError):
+        return None
 
 
 def _alert_notes(profile, report: FilterReport) -> str:
