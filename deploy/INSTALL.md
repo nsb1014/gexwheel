@@ -1,4 +1,38 @@
-# Deploy on Bazzite (podman quadlets + user timers)
+# Installing gexwheel
+
+## Option A - installer script (any Linux, recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nsb1014/gexwheel/main/install.sh | bash
+```
+
+or from a checkout: `./install.sh`. It prompts for your Discord webhook
+(hidden) and optional PRAW credentials (hidden), writes
+`~/gexwheel-data/config.yaml` (chmod 600), creates a virtualenv under
+`~/.local/share/gexwheel/app`, and enables the two systemd **user** timers:
+
+| Timer | Schedule | Job |
+|-------|----------|-----|
+| `gexwheel-mentions.timer` | daily 07:00 ET | Reddit mention scan |
+| `gexwheel-morning.timer` | Mon-Fri 07:15 ET | GEX screen + Discord alerts |
+
+Useful afterwards:
+
+```bash
+systemctl --user list-timers 'gexwheel-*'        # next fire times
+systemctl --user start gexwheel-mentions.service # one manual run
+journalctl --user -u gexwheel-morning.service -e # logs
+```
+
+Re-running the installer pulls the latest code and reinstalls dependencies but
+never overwrites an existing `config.yaml`. If no systemd user session exists
+(e.g. some containers/WSL setups), the installer skips timer setup - schedule
+`python -m gexwheel mentions` / `morning` yourself (cron works; set
+`PYTHONPATH=<install>/src` and `GEXWHEEL_CONFIG=~/gexwheel-data/config.yaml`).
+
+## Option B - containers (podman quadlets + user timers)
+
+For image-based hosts (e.g. Bazzite/Silverblue):
 
 ```bash
 # 1. data dir + config

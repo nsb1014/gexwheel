@@ -41,7 +41,8 @@ python -m gexwheel mentions              # step 4 smoke test
 python -m gexwheel test-discord          # step 9 smoke test
 ```
 
-Deploy: [deploy/INSTALL.md](./deploy/INSTALL.md).
+Deploy: `install.sh` (end-user installer; prompts for webhook/PRAW secrets) or
+[deploy/INSTALL.md](./deploy/INSTALL.md) for the container path.
 
 ## Known gotchas
 
