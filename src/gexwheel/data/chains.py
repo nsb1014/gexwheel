@@ -28,6 +28,7 @@ implemented later if/when a paid key is added.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from datetime import date, datetime
 from typing import Protocol
@@ -37,6 +38,18 @@ import yfinance as yf
 from ..models import OptionQuote
 
 log = logging.getLogger(__name__)
+
+
+def _num(value, default: float = 0.0) -> float:
+    """Coerce a pandas cell to float; NaN/None/unparseable -> default.
+
+    `value or 0` does NOT work here: float('nan') is truthy.
+    """
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    return default if math.isnan(f) else f
 
 
 class ChainFetchError(RuntimeError):
@@ -53,13 +66,10 @@ class YFinanceChains:
         self.retries = request_retries
 
     def _get_ticker(self, symbol: str):
-        for attempt in range(self.retries):
-            try:
-                return yf.Ticker(symbol)
-            except Exception as exc:
-                if attempt == self.retries - 1:
-                    raise ChainFetchError(f"Ticker({symbol}) failed: {exc}") from exc
-                time.sleep(2 ** attempt)
+        # yf.Ticker is a lazy constructor (no network I/O); real failures
+        # surface later on fast_info/options/option_chain access, which
+        # have their own retry handling.
+        return yf.Ticker(symbol)
 
     def _get_spot(self, ticker, symbol: str) -> float:
         try:
@@ -113,12 +123,12 @@ class YFinanceChains:
             for df, kind in ((oc.calls, "C"), (oc.puts, "P")):
                 for _, row in df.iterrows():
                     try:
-                        oi = int(row.get("openInterest") or 0)
-                        iv = float(row.get("impliedVolatility") or 0)
+                        oi = int(_num(row.get("openInterest")))
+                        iv = _num(row.get("impliedVolatility"))
                         if oi == 0 and iv == 0:
                             continue  # dead strike
-                        bid = float(row.get("bid") or 0.0)
-                        ask = float(row.get("ask") or 0.0)
+                        bid = _num(row.get("bid"))
+                        ask = _num(row.get("ask"))
                         strike = float(row["strike"])
                         quotes.append(OptionQuote(
                             symbol=symbol, strike=strike, expiry=exp_date,
