@@ -1,3 +1,8 @@
+> **STATUS: HISTORICAL.** Every build-order step below is implemented and
+> tested (see AGENTS.md status table). Kept for reference: the ground rules
+> in items 1–5 and the gotchas list still apply to new work; the build-order
+> table and its "Verify by" column do not gate anything anymore.
+
 # Implementation guide (for the implementing model)
 
 Ground rules:
