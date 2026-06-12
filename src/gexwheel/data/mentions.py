@@ -45,6 +45,10 @@ _CASHTAG_RE = re.compile(r"\$([A-Z]{1,5})\b")
 _BARE_RE = re.compile(r"(?<!\$)\b[A-Z]{1,5}\b")
 
 
+class MentionFetchError(RuntimeError):
+    pass
+
+
 def _get_with_retry(url: str, retries: int = 3, timeout: int = 15) -> dict:
     """GET with exponential backoff. Returns parsed JSON or raises MentionFetchError."""
     for attempt in range(retries):
@@ -58,10 +62,6 @@ def _get_with_retry(url: str, retries: int = 3, timeout: int = 15) -> dict:
             sleep = 2 ** attempt
             log.warning("apewisdom attempt %d failed (%s), retrying in %ds", attempt + 1, exc, sleep)
             time.sleep(sleep)
-
-
-class MentionFetchError(RuntimeError):
-    pass
 
 
 def fetch_apewisdom(filter_name: str, pages: int, asof: date) -> list[MentionRecord]:
@@ -101,7 +101,7 @@ def fetch_apewisdom(filter_name: str, pages: int, asof: date) -> list[MentionRec
             try:
                 upvotes = int(item.get("upvotes", 0) or 0)
             except (TypeError, ValueError):
-                upvotes = None
+                upvotes = 0   # NOTE: same fallback as mentions; bad data == no data
 
             # keep highest mention count if symbol appears across pages
             if symbol not in seen or mentions > seen[symbol].mentions:

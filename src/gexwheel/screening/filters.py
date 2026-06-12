@@ -31,7 +31,7 @@ passed = all(checks.values()). Pure function + DB reads only.
 from __future__ import annotations
 
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from ..data.prices import sma
 from ..models import FilterReport, GexProfile, OptionQuote
@@ -112,7 +112,6 @@ def run_filters(symbol: str, cfg: dict, conn: sqlite3.Connection, *,
     earnings_date = row["next_earnings_date"] if row else None
     if earnings_date and earnings_date != "unknown":
         try:
-            from datetime import datetime
             ed = datetime.strptime(earnings_date, "%Y-%m-%d").date()
             blackout_end = asof + timedelta(days=f["earnings_blackout_days"])
             checks["earnings"] = ed > blackout_end
@@ -143,7 +142,6 @@ def run_filters(symbol: str, cfg: dict, conn: sqlite3.Connection, *,
     cooldown_until = ticker_row["cooldown_until"] if ticker_row else None
     if cooldown_until:
         try:
-            from datetime import datetime
             cd_date = datetime.strptime(cooldown_until, "%Y-%m-%d").date()
             checks["not_cooled_down"] = asof > cd_date
         except ValueError:

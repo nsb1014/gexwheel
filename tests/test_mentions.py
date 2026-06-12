@@ -147,3 +147,15 @@ def test_fetch_praw_retries_transient_listing_failure(monkeypatch, tmp_path):
 
     assert attempts["new"] == 2
     assert [(r.symbol, r.mentions) for r in records] == [("TEST", 1)]
+
+
+def test_unparseable_upvotes_falls_back_to_zero_like_mentions():
+    payload = {"results": [
+        {"ticker": "TEST", "mentions": "5", "rank": 1, "upvotes": "n/a"},
+    ]}
+    with patch("gexwheel.data.mentions._get_with_retry", return_value=payload):
+        records = fetch_apewisdom("wallstreetbets", pages=1, asof=date(2026, 6, 10))
+
+    assert len(records) == 1
+    assert records[0].mentions == 5
+    assert records[0].upvotes == 0
