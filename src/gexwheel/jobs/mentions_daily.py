@@ -10,8 +10,10 @@ run(cfg) -> None
      the morning job. Persist triggers via the tickers table (discovery
      already upserted them with source='wsb_velocity'); morning job picks
      up any non-excluded ticker with no watchlist row for evaluation.
-  6. conn.commit(); conn.close(). Exit code 0 unless db itself failed -
-     systemd treats nonzero as failure and journald captures the trace.
+  6. conn.close(). run_discovery() owns its commits (it commits after
+     persisting mentions and after upserting triggers). Exit code 0 unless
+     db itself failed - systemd treats nonzero as failure and journald
+     captures the trace.
 
 Logging: stdlib logging, INFO to stdout (journald picks it up from podman).
 """
