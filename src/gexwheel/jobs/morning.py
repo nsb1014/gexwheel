@@ -43,8 +43,8 @@ from ..alerts.scoring import suggested_entry as make_entry
 from ..analytics import gex as gex_mod
 from ..analytics import vol as vol_mod
 from ..analytics.gex import put_wall_strength
-from ..data.chains import ChainFetchError, make_chain_source
-from ..data.prices import PriceFetchError, daily_closes, next_earnings, sector
+from ..data.chains import make_chain_source
+from ..data.prices import daily_closes, next_earnings, sector
 from ..models import AlertCard, FilterReport
 from ..screening.filters import run_filters
 
@@ -300,7 +300,6 @@ def _refresh_earnings(conn, symbol, asof):
     stale = True
     if row and row["updated_at"]:
         try:
-            from datetime import datetime
             updated = datetime.strptime(row["updated_at"], "%Y-%m-%d").date()
             stale = (asof - updated).days > 7
         except ValueError:
