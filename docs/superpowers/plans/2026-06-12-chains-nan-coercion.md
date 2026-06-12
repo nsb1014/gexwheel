@@ -1,5 +1,7 @@
 # Chains NaN Coercion Fix Implementation Plan
 
+> **STATUS: COMPLETE** — merged to `main` via [PR #3](https://github.com/nsb1014/gexwheel/pull/3). Do not re-implement; kept for traceability.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make `YFinanceChains` coerce pandas NaN values to 0 (as its docstring spec requires) instead of silently dropping rows or propagating NaN into `OptionQuote`, and remove the dead retry loop around the lazy `yf.Ticker` constructor.
