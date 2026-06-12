@@ -8,7 +8,9 @@ should_alert(profile, cfg, conn, asof) -> bool
   * wall persistence: db.recent_put_walls(symbol, wall_persistence_days)
     all equal to the current put_wall strike (use math.isclose, walls are
     floats). Fewer rows than required days -> not persistent -> False.
-  * no duplicate: no row in alerts table for (symbol, asof, 'put_wall_entry').
+  * no duplicate: no DELIVERED row (sent_at set) in alerts table for
+    (symbol, asof, 'put_wall_entry'); rows with sent_at NULL are failed
+    sends and do not dedup, so a re-run can retry them.
 
 score(profile, iv_rank_val, vrp_val, velocity_ratio) -> float
   Simple 0-100 composite for ranking which alerts to send first
@@ -31,6 +33,7 @@ import math
 import sqlite3
 from datetime import date
 
+from .. import db as gdb
 from ..models import GexProfile
 
 # Scoring weights — tune here without touching logic
@@ -41,6 +44,10 @@ WEIGHTS = {
     "velocity":  10,
     "proximity": 10,
 }
+
+# score() has no cfg access (frozen signature); keep this aligned with
+# alerts.put_wall_proximity_pct in config/config.example.yaml.
+DEFAULT_PROXIMITY_PCT = 0.03
 
 
 def should_alert(profile: GexProfile, cfg: dict, conn: sqlite3.Connection, asof: date) -> bool:
@@ -61,7 +68,6 @@ def should_alert(profile: GexProfile, cfg: dict, conn: sqlite3.Connection, asof:
         return False
 
     # Wall persistence: the same strike must appear in the last N GEX snapshots
-    from .. import db as gdb
     recent_walls = gdb.recent_put_walls(conn, profile.symbol, persistence_days)
     if len(recent_walls) < persistence_days:
         return False
@@ -71,9 +77,11 @@ def should_alert(profile: GexProfile, cfg: dict, conn: sqlite3.Connection, asof:
     ):
         return False
 
-    # No duplicate: no alert of this type already logged for today
+    # NOTE: only a *delivered* alert (sent_at set) dedups; rows logged with
+    # sent_at=NULL are failed sends that should be retried on a re-run
+    # (per the alerts/discord.py send_alerts spec).
     dup = conn.execute(
-        "SELECT 1 FROM alerts WHERE symbol=? AND date=? AND type=?",
+        "SELECT 1 FROM alerts WHERE symbol=? AND date=? AND type=? AND sent_at IS NOT NULL",
         (profile.symbol, asof.isoformat(), "put_wall_entry"),
     ).fetchone()
     return dup is None
@@ -82,7 +90,7 @@ def should_alert(profile: GexProfile, cfg: dict, conn: sqlite3.Connection, asof:
 def score(profile: GexProfile, iv_rank_val: float | None, vrp_val: float | None,
           velocity_ratio: float | None) -> float:
     """0-100 composite score for ranking alerts. Higher = better entry."""
-    proximity_pct = 0.03  # default; scoring doesn't have cfg access, use module-level default
+    proximity_pct = DEFAULT_PROXIMITY_PCT
 
     s = 0.0
 

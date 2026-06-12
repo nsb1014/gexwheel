@@ -52,3 +52,17 @@ def test_should_alert_requires_configured_wall_persistence():
     conn = _conn_with_recent_walls(18.0)
 
     assert should_alert(_profile(spot=18.0), _cfg(), conn, ASOF) is False
+
+
+def test_should_alert_retries_when_prior_alert_was_never_sent():
+    conn = _conn_with_recent_walls(18.0, 18.0)
+    gdb.log_alert(conn, "TEST", ASOF, "put_wall_entry", {}, sent_at=None)
+
+    assert should_alert(_profile(spot=18.0), _cfg(), conn, ASOF) is True
+
+
+def test_should_alert_dedups_when_prior_alert_was_sent():
+    conn = _conn_with_recent_walls(18.0, 18.0)
+    gdb.log_alert(conn, "TEST", ASOF, "put_wall_entry", {}, sent_at="2026-06-10T07:20:00")
+
+    assert should_alert(_profile(spot=18.0), _cfg(), conn, ASOF) is False
