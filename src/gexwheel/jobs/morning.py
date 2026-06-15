@@ -209,27 +209,17 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
         log.info("morning: %s generated alert score=%.1f", symbol, card_score)
 
 
-def _update_watchlist_membership(symbol: str, watchlist: set[str], report: FilterReport,
-                                 conn, asof) -> None:
-    """Promote new passing names, remove active names that no longer meet durable gates."""
-    if symbol not in watchlist:
-        if report.passed:
-            gdb.watchlist_add(conn, symbol, asof, score=None)
-        return
+def _update_watchlist_membership(symbol: str, report: FilterReport, conn, asof) -> None:
+    """Demote an active name only when a still-daily check fails.
 
+    Promotion onto the watchlist happens in screening.discovery (velocity);
+    structural entry-gating happens in jobs.screen. The morning job's job here
+    is just to drop names that fail a daily, time-sensitive check.
+    """
     failures = _failed_checks(report, _DAILY_REMOVE_CHECKS)
-    reason_prefix = "structural fail"
-
-    if not failures and asof.weekday() == 0:
-        if report.values.get("spread") == "no_quote":
-            return
-        failures = _failed_checks(report, _WEEKLY_PRUNE_CHECKS)
-        reason_prefix = "weekly prune"
-
     if not failures:
         return
-
-    note = f"{reason_prefix}: {', '.join(failures)}"
+    note = f"daily fail: {', '.join(failures)}"
     conn.execute(
         "UPDATE watchlist SET status='removed', notes=? WHERE symbol=?",
         (note, symbol),
