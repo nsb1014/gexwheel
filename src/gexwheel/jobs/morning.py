@@ -50,8 +50,9 @@ from ..screening.filters import run_filters
 
 log = logging.getLogger(__name__)
 
-_DAILY_REMOVE_CHECKS = ("price_range", "sector", "not_blocklisted")
-_WEEKLY_PRUNE_CHECKS = ("price_range", "open_interest", "iv_rank", "vrp")
+# Active names are demoted only on the still-daily checks. Structural gating
+# (price/volume/oi/spread/vrp/sector/blocklist) lives in the periodic screen.
+_DAILY_REMOVE_CHECKS = ("above_50dma", "earnings")
 
 
 def run(cfg: dict) -> None:
@@ -66,18 +67,11 @@ def run(cfg: dict) -> None:
     alert_cfg = cfg["alerts"]
     cooldown_days = alert_cfg.get("cooldown_days", 5)
 
-    # Candidates = active watchlist + new discovery tickers not yet on watchlist
-    watchlist = set(gdb.watchlist_active(conn))
-    discovery_rows = conn.execute(
-        """SELECT symbol FROM tickers
-           WHERE excluded=0
-           AND (cooldown_until IS NULL OR cooldown_until < ?)
-           AND symbol NOT IN (SELECT symbol FROM watchlist)""",
-        (asof.isoformat(),),
-    ).fetchall()
-    candidates = list(watchlist) + [r["symbol"] for r in discovery_rows]
-    log.info("morning: %d candidates (%d watchlist, %d new discovery)",
-             len(candidates), len(watchlist), len(discovery_rows))
+    # Candidates = the active (secondary) watchlist only. Structural entry-gating
+    # now lives in the periodic screen (jobs/screen.py); discovery promotes names
+    # onto this list via velocity. See specs/2026-06-15-screening-inversion-design.md.
+    candidates = sorted(gdb.watchlist_active(conn))
+    log.info("morning: %d active watchlist candidates", len(candidates))
 
     cards: list[AlertCard] = []
     alert_payloads: dict[tuple[str, str], dict] = {}
@@ -86,7 +80,7 @@ def run(cfg: dict) -> None:
         try:
             _process_symbol(
                 symbol, asof, conn, chain_src, cfg, data_cfg,
-                cooldown_days, watchlist, cards, alert_payloads
+                cooldown_days, cards, alert_payloads
             )
         except Exception as exc:
             log.error("morning: unhandled error for %s: %s", symbol, exc, exc_info=True)
@@ -118,7 +112,7 @@ def run(cfg: dict) -> None:
 
 
 def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
-                    cooldown_days, watchlist, cards, alert_payloads):
+                    cooldown_days, cards, alert_payloads):
     """Per-symbol processing block. All exceptions bubble to the caller's handler."""
 
     # 1. Fetch chain
@@ -176,7 +170,7 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
     log.info("morning: %s filters passed=%s checks=%s", symbol, report.passed, report.checks)
 
     # Promote/demote watchlist membership
-    _update_watchlist_membership(symbol, watchlist, report, conn, asof)
+    _update_watchlist_membership(symbol, report, conn, asof)
 
     # 7. Wall-break check
     if profile.put_wall is not None and spot < profile.put_wall:
