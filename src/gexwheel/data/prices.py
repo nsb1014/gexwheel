@@ -71,11 +71,49 @@ def daily_closes(symbol: str, lookback_days: int = 120) -> list[float]:
     return closes
 
 
+def daily_closes_and_volumes(
+    symbol: str, lookback_days: int = 120
+) -> tuple[list[float], list[float]]:
+    """Oldest-first (closes, volumes) from one history() call.
+
+    Rows with a NaN close are dropped (and their volume with them) so the two
+    lists stay index-aligned. Raises PriceFetchError if < 60 usable closes.
+    """
+    try:
+        ticker = yf.Ticker(symbol)
+        hist = _history_with_retry(ticker, f"{lookback_days}d")
+    except Exception as exc:
+        raise PriceFetchError(f"price history failed for {symbol}: {exc}") from exc
+
+    if hist is None or hist.empty:
+        raise PriceFetchError(f"no price history for {symbol}")
+
+    closes: list[float] = []
+    volumes: list[float] = []
+    for close, vol in zip(hist["Close"], hist["Volume"]):
+        if close != close:  # NaN check without importing math
+            continue
+        closes.append(float(close))
+        volumes.append(0.0 if (vol != vol) else float(vol))
+
+    if len(closes) < 60:
+        raise PriceFetchError(f"{symbol}: only {len(closes)} closes, need >= 60")
+    return closes, volumes
+
+
 def sma(closes: list[float], window: int) -> float:
     """Simple moving average of the last `window` closes."""
     if len(closes) < window:
         raise ValueError(f"need >= {window} closes for SMA, got {len(closes)}")
     tail = closes[-window:]
+    return sum(tail) / len(tail)
+
+
+def avg_volume(volumes: list[float], window: int) -> float:
+    """Mean of the last `window` daily share volumes (ValueError if short)."""
+    if len(volumes) < window:
+        raise ValueError(f"need >= {window} volumes for avg_volume, got {len(volumes)}")
+    tail = volumes[-window:]
     return sum(tail) / len(tail)
 
 
