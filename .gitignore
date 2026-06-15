@@ -178,5 +178,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Node (dashboard)
+web/node_modules/
+
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
