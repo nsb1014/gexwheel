@@ -6,6 +6,7 @@ Schema bootstrap and migrations are applied idempotently by connect().
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -14,9 +15,24 @@ from .models import GexProfile, MentionRecord
 
 _SCHEMA = Path(__file__).resolve().parents[2] / "schema.sql"
 _MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
+_REMOTE_SCHEMES = ("libsql://", "https://", "http://", "wss://", "ws://")
+
+
+def _is_remote(url: str) -> bool:
+    return url.startswith(_REMOTE_SCHEMES)
 
 
 def connect(db_path: str) -> sqlite3.Connection:
+    """Open the DB. A libsql/Turso URL (via TURSO_DATABASE_URL or db_path) routes
+    to the libsql adapter; anything else uses stdlib sqlite3 (local/dev/tests)."""
+    url = os.environ.get("TURSO_DATABASE_URL") or db_path
+    if _is_remote(url):
+        from .db_libsql import LibsqlConnection
+        conn = LibsqlConnection(url, os.environ.get("TURSO_AUTH_TOKEN"))
+        conn.executescript(_SCHEMA.read_text())
+        _apply_migrations(conn)
+        return conn
+
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
