@@ -54,9 +54,9 @@ Deploy: `install.sh` (end-user installer; prompts for webhook/PRAW secrets) or
 ## Architecture (quick reference)
 
 ```
-screen (periodic, ~3 weeks)     mentions_daily (07:00 ET)     morning (Mon–Fri 07:15 ET)
-  ApeWisdom → primary screen      ApeWisdom/PRAW → mentions     watchlist + discovery → chains → GEX → filters
-  → primary_watchlist             → velocity → tickers          → vol stats → scoring → Discord
+screen (periodic, ~3 weeks)       mentions_daily (07:00 ET)       morning (Mon–Fri 07:15 ET)
+  ApeWisdom → primary screen        velocity on primary members     active watchlist → GEX → filters → alerts
+  → primary_watchlist               → promote to active watchlist   (structural gate is in screen, not morning)
 ```
 
 SQLite spine: `mentions`, `gex_snapshots`, `vol_stats`, `tickers`, `watchlist`, `alerts`, `primary_watchlist`, `app_state`.

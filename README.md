@@ -5,18 +5,13 @@ feeds a hard screening gate; survivors get GEX profiles computed from option
 open interest; Discord alerts fire when spot approaches a persistent put wall.
 
 ```
-mentions_daily (every day 07:00 ET)          morning (Mon-Fri 07:15 ET)
-┌──────────────────────────────┐   ┌─────────────────────────────────────────┐
-│ ApeWisdom/PRAW mention pull  │   │ for each watchlist + discovery ticker:  │
-│ -> mentions table            │   │   yfinance chain -> GEX profile/walls   │
-│ -> velocity (3x over 7d avg, │   │   IV rank / realized vol / VRP          │
-│    baseline floor 10)        │   │   Stage-2 hard filters (no overrides)   │
-│ -> tickers table (candidates)│   │   wall-break -> bench w/ cooldown       │
-└──────────────────────────────┘   │   persistent wall + proximity -> score  │
-                                   │   -> Discord webhook (top N embeds)     │
-                                   └─────────────────────────────────────────┘
-                       SQLite (gexwheel.db) is the spine: mentions,
-                       gex_snapshots, vol_stats, tickers, watchlist, alerts
+screen (~21d)                    mentions_daily (07:00 ET)          morning (Mon-Fri 07:15 ET)
+┌────────────────────────────┐   ┌──────────────────────────────┐   ┌─────────────────────────────────────────┐
+│ ApeWisdom → structural     │   │ velocity on primary members  │   │ active watchlist only:                  │
+│ screen → primary_watchlist │   │ → promote to active watchlist│   │ chains → GEX → filters → alerts         │
+└────────────────────────────┘   └──────────────────────────────┘   └─────────────────────────────────────────┘
+                       SQLite (gexwheel.db) is the spine: mentions, gex_snapshots,
+                       vol_stats, tickers, watchlist, alerts, primary_watchlist, app_state
 ```
 
 ## Install (Linux)
