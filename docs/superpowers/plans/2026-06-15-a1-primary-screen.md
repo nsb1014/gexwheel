@@ -843,20 +843,33 @@ def test_screen_not_due_is_noop(tmp_path):
         m_fetch.assert_not_called()
 
 
-def test_screen_demotes_incumbent_dropped_from_primary(tmp_path):
+def test_screen_demotes_incumbent_that_now_fails_the_screen(tmp_path):
+    # Incumbents are always re-screened (universe = apewisdom UNION incumbents),
+    # so a name drops only when it FAILS the screen now — here OLD fails the
+    # avg-volume gate while AAA passes.
     cfg = _cfg(tmp_path)
     conn = gdb.connect(cfg["db_path"])
-    # OLD is a current primary member AND active on the secondary watchlist
     gdb.upsert_primary(conn, "OLD", ASOF - timedelta(days=21), metrics={"spot": 20.0})
     gdb.watchlist_add(conn, "OLD", ASOF - timedelta(days=21))
     conn.commit()
     conn.close()
-    # New universe no longer contains OLD
-    p1, p2, p3, p4 = _patches(["AAA"])
-    with p1, p2, p3, p4:
+
+    closes = [20.0] * 61
+
+    def _vols(symbol, lookback_days=120):
+        v = 100_000.0 if symbol == "OLD" else 2_000_000.0   # OLD below min_avg_volume
+        return closes, [v] * 61
+
+    records = [MentionRecord("AAA", ASOF, 100, source="apewisdom")]
+    with patch("gexwheel.jobs.screen.fetch_apewisdom", return_value=records), \
+         patch("gexwheel.jobs.screen.make_chain_source", return_value=_FakeChain()), \
+         patch("gexwheel.jobs.screen.daily_closes_and_volumes", side_effect=_vols), \
+         patch("gexwheel.jobs.screen.sector", return_value="Industrials"):
         screen_job.run(cfg, force=True)
+
     conn = gdb.connect(cfg["db_path"])
     assert "OLD" not in gdb.primary_symbols(conn)
+    assert "AAA" in gdb.primary_symbols(conn)
     status = conn.execute("SELECT status FROM watchlist WHERE symbol='OLD'").fetchone()["status"]
     assert status == "removed"
 
