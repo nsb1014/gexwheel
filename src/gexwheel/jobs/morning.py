@@ -26,9 +26,8 @@ run(cfg) -> None
     8. if report.passed and scoring.should_alert(profile, cfg, conn, asof):
          build AlertCard (suggested_entry per scoring docstring), collect
 
-  Finally: sent_cards = discord.send_alerts(cards, cfg); db.log_alert for each
-  candidate card (sent_at = iso now only when that card was actually posted);
-  commit; one INFO summary line; close.
+  Finally: persist every identified trade to the alerts table (the dashboard
+  reads them); commit; one INFO summary line; close.
 """
 from __future__ import annotations
 
@@ -37,7 +36,6 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from .. import db as gdb
-from ..alerts import discord as disc
 from ..alerts.scoring import score, should_alert
 from ..alerts.scoring import suggested_entry as make_entry
 from ..analytics import gex as gex_mod
@@ -56,7 +54,7 @@ _DAILY_REMOVE_CHECKS = ("above_50dma", "earnings")
 
 
 def run(cfg: dict) -> None:
-    """Weekday pre-market: refresh GEX, run filters, fire Discord alerts."""
+    """Weekday pre-market: refresh GEX, run filters, identify and persist trades."""
     tz = ZoneInfo(cfg.get("timezone", "America/New_York"))
     asof = datetime.now(tz).date()
     log.info("morning: starting for %s", asof)
@@ -85,27 +83,13 @@ def run(cfg: dict) -> None:
         except Exception as exc:
             log.error("morning: unhandled error for %s: %s", symbol, exc, exc_info=True)
 
-    # Send alerts
+    # Persist every identified trade (the dashboard is the delivery surface now).
     if cards:
-        # send_alerts sorts and truncates to max_alerts_per_run internally;
-        # truncate here too so only attempted cards are logged (re-sorting an
-        # already-truncated list inside send_alerts is a no-op).
-        max_cards = cfg["discord"].get("max_alerts_per_run", 8)
-        top_cards = sorted(cards, key=lambda c: c.score, reverse=True)[:max_cards]
-        sent_cards = disc.send_alerts(top_cards, cfg)
-        sent_keys = {(c.symbol, c.alert_type) for c in sent_cards}
         now_iso = datetime.now(tz).isoformat()
-        for card in top_cards:
-            delivered = (card.symbol, card.alert_type) in sent_keys
-            gdb.log_alert(
-                conn, card.symbol, asof, card.alert_type,
-                alert_payloads[(card.symbol, card.alert_type)],
-                now_iso if delivered else None,
-            )
-        conn.commit()
-        log.info("morning: sent %d/%d alerts", len(sent_cards), len(top_cards))
+        _persist_trades(conn, cards, alert_payloads, asof, now_iso)
+        log.info("morning: identified %d trades", len(cards))
     else:
-        log.info("morning: no alerts generated")
+        log.info("morning: no trades identified")
 
     conn.commit()
     conn.close()
@@ -251,6 +235,20 @@ def _velocity_ratio(conn, symbol: str, asof, source: str) -> float | None:
         return row["mentions"] / row["baseline"]
     except (TypeError, ZeroDivisionError):
         return None
+
+
+def _persist_trades(conn, cards, alert_payloads, asof, now_iso: str) -> None:
+    """Write every identified trade to the alerts table, highest score first.
+
+    There is no separate delivery step anymore: the dashboard reads these rows,
+    so sent_at records the identification/publish time for every trade.
+    """
+    for card in sorted(cards, key=lambda c: c.score, reverse=True):
+        gdb.log_alert(
+            conn, card.symbol, asof, card.alert_type,
+            alert_payloads[(card.symbol, card.alert_type)],
+            now_iso,
+        )
 
 
 def _alert_notes(profile, report: FilterReport) -> str:
