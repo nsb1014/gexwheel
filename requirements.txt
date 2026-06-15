@@ -6,6 +6,10 @@ PyYAML>=6.0
 yfinance>=0.2.50        # option chains + price history (free tier)
 praw>=7.7               # OPTIONAL: Reddit API fallback for mention counts
 
+# Remote store (hosted SQLite). Required for the cloud deployment; local/dev and
+# tests fall back to stdlib sqlite3 via db.connect(), so this is import-light.
+libsql-experimental>=0.0.55
+
 # Transitive version floors (pulled in by yfinance; nothing in src/ imports
 # these directly — pinned only to keep resolver behavior predictable)
 pandas>=2.0
