@@ -10,46 +10,26 @@ screen (~21d)                    mentions_daily (07:00 ET)          morning (Mon
 │ ApeWisdom → structural     │   │ velocity on primary members  │   │ active watchlist only:                  │
 │ screen → primary_watchlist │   │ → promote to active watchlist│   │ chains → GEX → filters → dashboard    │
 └────────────────────────────┘   └──────────────────────────────┘   └─────────────────────────────────────────┘
-                       SQLite (gexwheel.db) is the spine: mentions, gex_snapshots,
-                       vol_stats, tickers, watchlist, alerts, primary_watchlist, app_state
+                       Turso (hosted libSQL) is the spine in production; local dev uses SQLite.
 ```
 
-## Install (Linux)
+## Deploy
 
-Requirements: Linux with `git` and Python 3.10+ (with venv support, e.g.
-`sudo apt install git python3-venv`). A systemd user session is used for
-scheduling if available; otherwise the installer tells you what to schedule
-yourself.
+gexwheel runs on free cloud services — no personal machine required.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/nsb1014/gexwheel/main/install.sh | bash
-```
+- **Jobs:** GitHub Actions cron (`.github/workflows/`)
+- **Database:** Turso (hosted libSQL)
+- **Dashboard:** Cloudflare Pages (`web/`)
 
-The installer:
-
-1. clones the repo to `~/.local/share/gexwheel/app` (or installs in place if
-   you run `./install.sh` from a checkout) and builds a private virtualenv;
-2. prompts for **Reddit/PRAW API credentials** (optional, input hidden - ApeWisdom needs
-   no key, PRAW just adds a fallback source);
-3. writes `~/gexwheel-data/config.yaml` with permissions `600`;
-4. installs and enables systemd user timers for the jobs.
-
-Non-interactive installs: set `GEXWHEEL_PRAW_CLIENT_ID` / `GEXWHEEL_PRAW_CLIENT_SECRET`
-in the environment if using PRAW.
-Paths are overridable via `GEXWHEEL_INSTALL_DIR` and `GEXWHEEL_DATA_DIR`.
-
-Re-running the installer updates the code and dependencies but keeps your
-existing `config.yaml`; delete it and re-run to reconfigure. A
-container-based deployment (podman quadlets) is documented in
-[deploy/INSTALL.md](./deploy/INSTALL.md).
+Full setup: [deploy/INSTALL.md](./deploy/INSTALL.md). Dashboard: [web/README.md](./web/README.md).
 
 ## Configuration
 
 All tunables (price band, OI/spread/IV-rank gates, proximity thresholds,
-cooldowns, subreddit filter, ...) live in `~/gexwheel-data/config.yaml` and
-are documented inline in
-[config/config.example.yaml](./config/config.example.yaml). Keep the file private (the installer
-sets `chmod 600`).
+cooldowns, subreddit filter, ...) are documented inline in
+[config/config.example.yaml](./config/config.example.yaml). GitHub Actions jobs
+use those defaults plus `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` from repo secrets.
+For local runs, copy the example to `config/config.yaml` or set `GEXWHEEL_CONFIG`.
 
 ## Key design facts
 
@@ -69,7 +49,7 @@ sets `chmod 600`).
 
 The core pipeline modules are implemented and covered by local tests:
 analytics, data adapters, discovery, filters, alert scoring, jobs, config, models,
-migrations, and SQLite helpers. Identified trades are read by the Cloudflare dashboard (Plan B2).
+migrations, and SQLite helpers. Identified trades are published to the Cloudflare dashboard.
 
 The historical build order and live smoke-test checklist are documented in
 **IMPLEMENTATION_GUIDE.md**. Live checks still require configured external
@@ -93,8 +73,8 @@ python -m gexwheel morning        # weekday GEX + identify trades
 python -m gexwheel show SYMBOL    # dump latest stored GEX snapshot
 ```
 
-Contributor ground rules are in [AGENTS.md](./AGENTS.md); deployment details
-in [deploy/INSTALL.md](./deploy/INSTALL.md).
+Contributor ground rules are in [AGENTS.md](./AGENTS.md). Cloud deploy:
+[deploy/INSTALL.md](./deploy/INSTALL.md); dashboard: [web/README.md](./web/README.md).
 
 ## License
 

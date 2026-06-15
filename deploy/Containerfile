@@ -1,8 +1,0 @@
-FROM python:3.12-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-ENV PYTHONPATH=/app/src GEXWHEEL_CONFIG=/data/config.yaml
-ENTRYPOINT ["python", "-m", "gexwheel"]
-# build:  podman build -t localhost/gexwheel:latest -f deploy/Containerfile .

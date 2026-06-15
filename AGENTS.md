@@ -40,7 +40,8 @@ PYTHONPATH=src pytest                    # must stay green after every step
 python -m gexwheel mentions              # step 4 smoke test
 ```
 
-Deploy: [deploy/INSTALL.md](./deploy/INSTALL.md) for the container path (cloud migration).
+Deploy: [deploy/INSTALL.md](./deploy/INSTALL.md) (Turso + GitHub Actions + Cloudflare Pages).
+Dashboard: [web/README.md](./web/README.md).
 
 ## Known gotchas
 
