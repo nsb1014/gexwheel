@@ -29,6 +29,12 @@ discovery:                       # Stage 1 - cast wide
   min_history_days: 5            # need at least this many days of history
   max_daily_mentions: 1000       # ignore permanent meme residents above this baseline
 
+screen:                          # periodic primary-watchlist screen
+  primary_screen_interval_days: 21
+  screen_pages: 5                # wider ApeWisdom pull than daily apewisdom_pages
+  avg_volume_days: 20            # window for the average-daily-volume gate
+  min_avg_volume: 1000000        # NEW gate: avg daily shares
+
 filters:                         # Stage 2 - hard gate, no overrides
   price_min: 10.0
   price_max: 45.0                # collateral fit for ~$26k account; raise as account grows
