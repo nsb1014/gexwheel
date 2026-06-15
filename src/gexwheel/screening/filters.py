@@ -35,6 +35,7 @@ from datetime import date, datetime, timedelta
 
 from ..data.prices import sma
 from ..models import FilterReport, GexProfile, OptionQuote
+from .chain_metrics import atm_call_spread, near_oi_sum
 
 
 def run_filters(symbol: str, cfg: dict, conn: sqlite3.Connection, *,
@@ -65,35 +66,16 @@ def run_filters(symbol: str, cfg: dict, conn: sqlite3.Connection, *,
         values["sma50"] = None
 
     # --- open_interest: sum OI on 3 nearest strikes, nearest expiry > 7 DTE ---
-    eligible_expiries = sorted(
-        {q.expiry for q in quotes if (q.expiry - asof).days > 7},
-        key=lambda e: (e - asof).days
-    )
-    if eligible_expiries:
-        near_exp = eligible_expiries[0]
-        near_quotes = [q for q in quotes if q.expiry == near_exp]
-        strikes_sorted = sorted({q.strike for q in near_quotes}, key=lambda s: abs(s - spot))
-        top3_strikes = set(strikes_sorted[:3])
-        total_oi = sum(q.open_interest for q in near_quotes if q.strike in top3_strikes)
-    else:
-        total_oi = 0
+    total_oi = near_oi_sum(quotes, spot, asof)
     checks["open_interest"] = total_oi >= f["min_open_interest"]
     values["near_oi"] = total_oi
 
     # --- spread: ATM call on nearest expiry > 7 DTE ---
-    atm_call = None
-    if eligible_expiries:
-        near_calls = [q for q in quotes if q.expiry == eligible_expiries[0] and q.kind == "C"]
-        if near_calls:
-            atm_call = min(near_calls, key=lambda q: abs(q.strike - spot))
-    if atm_call is None:
-        checks["spread"] = False
-        values["spread"] = "no_quote"
-    elif atm_call.bid == 0 and atm_call.ask == 0:
+    sp, status = atm_call_spread(quotes, spot, asof)
+    if status == "no_quote":
         checks["spread"] = False
         values["spread"] = "no_quote"
     else:
-        sp = atm_call.spread_pct
         checks["spread"] = sp <= f["max_spread_pct"]
         values["spread"] = round(sp, 4)
 
