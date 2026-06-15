@@ -96,6 +96,7 @@ Useful CLI entrypoints (see `python -m gexwheel --help`):
 
 ```bash
 python -m gexwheel mentions       # daily Reddit scan
+python -m gexwheel screen [--force]  # periodic primary-watchlist screen
 python -m gexwheel morning        # weekday GEX + screen + alerts
 python -m gexwheel test-discord   # one-shot webhook sanity check
 python -m gexwheel show SYMBOL    # dump latest stored GEX snapshot

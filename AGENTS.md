@@ -26,7 +26,7 @@ spot approaches a persistent put wall.
 
 | Status | Modules |
 |--------|---------|
-| IMPLEMENTED (local tests) | `analytics/gex.py`, `analytics/velocity.py`, `analytics/vol.py`, `models.py`, `db.py`, `config.py`, `__main__.py`, `data/mentions.py`, `data/chains.py`, `data/prices.py`, `screening/discovery.py`, `screening/filters.py`, `alerts/scoring.py`, `alerts/discord.py`, `jobs/mentions_daily.py`, `jobs/morning.py` |
+| IMPLEMENTED (local tests) | `analytics/gex.py`, `analytics/velocity.py`, `analytics/vol.py`, `models.py`, `db.py`, `config.py`, `__main__.py`, `data/mentions.py`, `data/chains.py`, `data/prices.py`, `screening/discovery.py`, `screening/filters.py`, `screening/primary.py`, `screening/chain_metrics.py`, `alerts/scoring.py`, `alerts/discord.py`, `jobs/mentions_daily.py`, `jobs/morning.py`, `jobs/screen.py` |
 | LIVE/ENV VERIFICATION | ApeWisdom/yfinance/Discord smoke checks from `IMPLEMENTATION_GUIDE.md` require configured external services. |
 
 Historical build order and verification commands: **IMPLEMENTATION_GUIDE.md**.
@@ -54,9 +54,9 @@ Deploy: `install.sh` (end-user installer; prompts for webhook/PRAW secrets) or
 ## Architecture (quick reference)
 
 ```
-mentions_daily (07:00 ET)     morning (Mon–Fri 07:15 ET)
-  ApeWisdom/PRAW → mentions     watchlist + discovery → chains → GEX → filters
-  → velocity → tickers          → vol stats → scoring → Discord
+screen (periodic, ~3 weeks)     mentions_daily (07:00 ET)     morning (Mon–Fri 07:15 ET)
+  ApeWisdom → primary screen      ApeWisdom/PRAW → mentions     watchlist + discovery → chains → GEX → filters
+  → primary_watchlist             → velocity → tickers          → vol stats → scoring → Discord
 ```
 
-SQLite spine: `mentions`, `gex_snapshots`, `vol_stats`, `tickers`, `watchlist`, `alerts`.
+SQLite spine: `mentions`, `gex_snapshots`, `vol_stats`, `tickers`, `watchlist`, `alerts`, `primary_watchlist`, `app_state`.
