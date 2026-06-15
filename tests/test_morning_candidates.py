@@ -16,7 +16,6 @@ def _base_cfg(tmp_path):
                  "request_sleep_s": 0, "request_retries": 1, "risk_free_rate": 0.045},
         "reddit": {"source": "apewisdom"},
         "filters": {}, "alerts": {"cooldown_days": 5},
-        "discord": {"max_alerts_per_run": 8, "webhook_url": "x"},
     }
 
 

@@ -3,7 +3,6 @@
   python -m gexwheel mentions          # daily Reddit scan
   python -m gexwheel screen [--force]  # periodic primary-watchlist screen
   python -m gexwheel morning           # weekday GEX + screen + alerts
-  python -m gexwheel test-discord      # one-shot webhook sanity check
   python -m gexwheel show <SYMBOL>     # dump latest stored GEX snapshot (debug)
 """
 from __future__ import annotations
@@ -28,7 +27,6 @@ def main(argv: list[str] | None = None) -> int:
     screen_p.add_argument("--force", action="store_true",
                           help="ignore the interval throttle and re-screen now")
     sub.add_parser("morning")
-    sub.add_parser("test-discord")
     show = sub.add_parser("show")
     show.add_argument("symbol")
     args = p.parse_args(argv)
@@ -44,11 +42,6 @@ def main(argv: list[str] | None = None) -> int:
     elif args.cmd == "morning":
         from .jobs import morning
         morning.run(cfg)
-    elif args.cmd == "test-discord":
-        from .alerts.discord import test_webhook
-        ok = test_webhook(cfg)
-        print("webhook OK" if ok else "webhook FAILED")
-        return 0 if ok else 1
     elif args.cmd == "show":
         conn = db.connect(cfg["db_path"])
         row = conn.execute(

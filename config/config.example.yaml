@@ -1,11 +1,6 @@
 # gexwheel configuration. Copy to config.yaml (mounted at /data/config.yaml in container).
 db_path: /data/gexwheel.db
 
-discord:
-  webhook_url: "https://discord.com/api/webhooks/CHANGE_ME"
-  username: "GEX Wheel"
-  max_alerts_per_run: 8          # don't spam the channel
-
 data:
   chain_source: yfinance         # 'yfinance' now; 'polygon' interface stubbed for later
   polygon_api_key: ""
