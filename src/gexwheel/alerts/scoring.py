@@ -8,13 +8,11 @@ should_alert(profile, cfg, conn, asof) -> bool
   * wall persistence: db.recent_put_walls(symbol, wall_persistence_days)
     all equal to the current put_wall strike (use math.isclose, walls are
     floats). Fewer rows than required days -> not persistent -> False.
-  * no duplicate: no DELIVERED row (sent_at set) in alerts table for
-    (symbol, asof, 'put_wall_entry'); rows with sent_at NULL are failed
-    sends and do not dedup, so a re-run can retry them.
+  * no duplicate: no existing alerts row for (symbol, asof, 'put_wall_entry')
+    — one identified trade per day.
 
 score(profile, iv_rank_val, vrp_val, velocity_ratio) -> float
-  Simple 0-100 composite for ranking which alerts to send first
-  (max_alerts_per_run caps the Discord batch):
+  Simple 0-100 composite for ranking trades (highest score shown first on the dashboard):
     +35 * min(iv_rank_val / 100, 1)                    [premium richness]
     +25 * min(max(vrp_val, 0) / 0.15, 1)               [edge: IV over RV, 15 vol pts = full credit]
     +20 if profile.regime == 'positive' else 0          [dampened tape]
@@ -77,11 +75,10 @@ def should_alert(profile: GexProfile, cfg: dict, conn: sqlite3.Connection, asof:
     ):
         return False
 
-    # NOTE: only a *delivered* alert (sent_at set) dedups; rows logged with
-    # sent_at=NULL are failed sends that should be retried on a re-run
-    # (per the alerts/discord.py send_alerts spec).
+    # Dedup: one identified trade per (symbol, day, type). Every identified
+    # trade is published to the dashboard, so existence — not delivery — dedups.
     dup = conn.execute(
-        "SELECT 1 FROM alerts WHERE symbol=? AND date=? AND type=? AND sent_at IS NOT NULL",
+        "SELECT 1 FROM alerts WHERE symbol=? AND date=? AND type=?",
         (profile.symbol, asof.isoformat(), "put_wall_entry"),
     ).fetchone()
     return dup is None
@@ -120,7 +117,7 @@ def score(profile: GexProfile, iv_rank_val: float | None, vrp_val: float | None,
 
 
 def suggested_entry(profile: GexProfile) -> str:
-    """Human-readable entry suggestion for the Discord card."""
+    """Human-readable entry suggestion for the dashboard."""
     if profile.put_wall is None:
         return "No put wall identified"
     pct = (profile.spot - profile.put_wall) / profile.spot * 100
