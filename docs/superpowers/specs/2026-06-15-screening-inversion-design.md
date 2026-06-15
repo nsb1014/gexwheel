@@ -179,9 +179,11 @@ Candidates become **the active (secondary) watchlist only**. Remove the
 discovery-promotion branch and the per-candidate structural hard gate from the
 morning path. The morning job keeps: GEX profile + `regime`, put-wall
 proximity/persistence, `above_50dma`, earnings blackout, `not_cooled_down` /
-wall-break bench, scoring, and Discord delivery. `above_50dma` + `earnings`
-remain here (they are cheap and time-sensitive) rather than in the periodic
-screen.
+wall-break bench, scoring, and persisting the resulting trades to the `alerts`
+table. `above_50dma` + `earnings` remain here (they are cheap and
+time-sensitive) rather than in the periodic screen. The alert *delivery*
+channel is handled in Subsystem B (Discord push is removed there in favor of
+the dashboard) — A makes no delivery changes.
 
 The weekly-prune logic in `_update_watchlist_membership` is superseded: a name
 leaves the secondary list when it drops from the primary screen, gets benched on
@@ -223,6 +225,13 @@ primary_watchlist
 watchlist(active)
    └─ morning ─ GEX/proximity/regime/earnings ─▶ alerts (the day's trades)
 ```
+
+> **Cross-subsystem note:** the *output channel* is intentionally out of scope
+> for Subsystem A. A keeps the morning job **computing and persisting** the
+> day's trades into the `alerts` table (via scoring), but does not touch how
+> they are delivered. Subsystem B removes the Discord push entirely and makes
+> the Cloudflare dashboard the sole surface that reads the `alerts` rows. A's
+> morning changes must therefore not add any new Discord coupling.
 
 ## Error handling
 
