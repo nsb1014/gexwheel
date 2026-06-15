@@ -1,8 +1,8 @@
 # gexwheel — Cursor agent guide
 
 Gamma-wall driven wheel-entry alerting. Daily Reddit mention-velocity discovery feeds a
-hard screening gate; survivors get GEX profiles from option OI; Discord alerts fire when
-spot approaches a persistent put wall.
+hard screening gate; survivors get GEX profiles from option OI; identified trades are
+published to a dashboard when spot approaches a persistent put wall.
 
 **Authoritative build spec:** [IMPLEMENTATION_GUIDE.md](./IMPLEMENTATION_GUIDE.md)
 
@@ -26,8 +26,8 @@ spot approaches a persistent put wall.
 
 | Status | Modules |
 |--------|---------|
-| IMPLEMENTED (local tests) | `analytics/gex.py`, `analytics/velocity.py`, `analytics/vol.py`, `models.py`, `db.py`, `config.py`, `__main__.py`, `data/mentions.py`, `data/chains.py`, `data/prices.py`, `screening/discovery.py`, `screening/filters.py`, `screening/primary.py`, `screening/chain_metrics.py`, `alerts/scoring.py`, `alerts/discord.py`, `jobs/mentions_daily.py`, `jobs/morning.py`, `jobs/screen.py` |
-| LIVE/ENV VERIFICATION | ApeWisdom/yfinance/Discord smoke checks from `IMPLEMENTATION_GUIDE.md` require configured external services. |
+| IMPLEMENTED (local tests) | `analytics/gex.py`, `analytics/velocity.py`, `analytics/vol.py`, `models.py`, `db.py`, `config.py`, `__main__.py`, `data/mentions.py`, `data/chains.py`, `data/prices.py`, `screening/discovery.py`, `screening/filters.py`, `screening/primary.py`, `screening/chain_metrics.py`, `alerts/scoring.py`, `jobs/mentions_daily.py`, `jobs/morning.py`, `jobs/screen.py` |
+| LIVE/ENV VERIFICATION | ApeWisdom/yfinance smoke checks from `IMPLEMENTATION_GUIDE.md` require configured external services. |
 
 Historical build order and verification commands: **IMPLEMENTATION_GUIDE.md**.
 
@@ -38,11 +38,9 @@ python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 PYTHONPATH=src pytest                    # must stay green after every step
 python -m gexwheel mentions              # step 4 smoke test
-python -m gexwheel test-discord          # step 9 smoke test
 ```
 
-Deploy: `install.sh` (end-user installer; prompts for webhook/PRAW secrets) or
-[deploy/INSTALL.md](./deploy/INSTALL.md) for the container path.
+Deploy: [deploy/INSTALL.md](./deploy/INSTALL.md) for the container path (cloud migration).
 
 ## Known gotchas
 
@@ -55,7 +53,7 @@ Deploy: `install.sh` (end-user installer; prompts for webhook/PRAW secrets) or
 
 ```
 screen (periodic, ~3 weeks)       mentions_daily (07:00 ET)       morning (Mon–Fri 07:15 ET)
-  ApeWisdom → primary screen        velocity on primary members     active watchlist → GEX → filters → alerts
+  ApeWisdom → primary screen        velocity on primary members     active watchlist → GEX → filters → dashboard
   → primary_watchlist               → promote to active watchlist   (structural gate is in screen, not morning)
 ```
 

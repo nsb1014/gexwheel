@@ -8,6 +8,8 @@ every finding to the plan and task that fixes it.
 > are merged to `main`. The suite is **57 tests** (`PYTHONPATH=src pytest`).
 > Do not re-implement these plans — use this index only for traceability.
 > Open work lives in [2026-06-12-deferred-decisions.md](./2026-06-12-deferred-decisions.md).
+>
+> Discord delivery removed in the 2026-06-15 cloud migration; historical references below predate it.
 
 **Hard constraints (from `.cursor/rules/` and `AGENTS.md`), repeated because
 they bound every fix:** do not rename `models.py` fields, do not change

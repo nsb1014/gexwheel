@@ -1,6 +1,6 @@
 # Quadlet unit - place in ~/.config/containers/systemd/
 [Unit]
-Description=gexwheel - weekday pre-market GEX screen + Discord alerts
+Description=gexwheel - weekday pre-market GEX screen + trade identification
 
 [Container]
 Image=localhost/gexwheel:latest

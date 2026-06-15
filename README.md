@@ -2,13 +2,13 @@
 
 Gamma-wall driven wheel-entry alerting. Daily Reddit mention-velocity discovery
 feeds a hard screening gate; survivors get GEX profiles computed from option
-open interest; Discord alerts fire when spot approaches a persistent put wall.
+open interest; identified trades are published to a dashboard when spot approaches a persistent put wall.
 
 ```
 screen (~21d)                    mentions_daily (07:00 ET)          morning (Mon-Fri 07:15 ET)
 ┌────────────────────────────┐   ┌──────────────────────────────┐   ┌─────────────────────────────────────────┐
 │ ApeWisdom → structural     │   │ velocity on primary members  │   │ active watchlist only:                  │
-│ screen → primary_watchlist │   │ → promote to active watchlist│   │ chains → GEX → filters → alerts         │
+│ screen → primary_watchlist │   │ → promote to active watchlist│   │ chains → GEX → filters → dashboard    │
 └────────────────────────────┘   └──────────────────────────────┘   └─────────────────────────────────────────┘
                        SQLite (gexwheel.db) is the spine: mentions, gex_snapshots,
                        vol_stats, tickers, watchlist, alerts, primary_watchlist, app_state
@@ -29,15 +29,13 @@ The installer:
 
 1. clones the repo to `~/.local/share/gexwheel/app` (or installs in place if
    you run `./install.sh` from a checkout) and builds a private virtualenv;
-2. prompts for your **Discord webhook URL** (required, input hidden) and
-   **Reddit/PRAW API credentials** (optional, input hidden - ApeWisdom needs
+2. prompts for **Reddit/PRAW API credentials** (optional, input hidden - ApeWisdom needs
    no key, PRAW just adds a fallback source);
 3. writes `~/gexwheel-data/config.yaml` with permissions `600`;
-4. installs and enables systemd user timers for the two jobs and offers a
-   one-shot `test-discord` to verify the webhook.
+4. installs and enables systemd user timers for the jobs.
 
-Non-interactive installs: set `GEXWHEEL_WEBHOOK_URL` (and optionally
-`GEXWHEEL_PRAW_CLIENT_ID` / `GEXWHEEL_PRAW_CLIENT_SECRET`) in the environment.
+Non-interactive installs: set `GEXWHEEL_PRAW_CLIENT_ID` / `GEXWHEEL_PRAW_CLIENT_SECRET`
+in the environment if using PRAW.
 Paths are overridable via `GEXWHEEL_INSTALL_DIR` and `GEXWHEEL_DATA_DIR`.
 
 Re-running the installer updates the code and dependencies but keeps your
@@ -50,8 +48,7 @@ container-based deployment (podman quadlets) is documented in
 All tunables (price band, OI/spread/IV-rank gates, proximity thresholds,
 cooldowns, subreddit filter, ...) live in `~/gexwheel-data/config.yaml` and
 are documented inline in
-[config/config.example.yaml](./config/config.example.yaml). The file contains
-your webhook URL and any PRAW credentials - keep it private (the installer
+[config/config.example.yaml](./config/config.example.yaml). Keep the file private (the installer
 sets `chmod 600`).
 
 ## Key design facts
@@ -71,12 +68,12 @@ sets `chmod 600`).
 ## Status
 
 The core pipeline modules are implemented and covered by local tests:
-analytics, data adapters, discovery, filters, alert scoring/Discord delivery,
-jobs, config, models, migrations, and SQLite helpers.
+analytics, data adapters, discovery, filters, alert scoring, jobs, config, models,
+migrations, and SQLite helpers. Identified trades are read by the Cloudflare dashboard (Plan B2).
 
 The historical build order and live smoke-test checklist are documented in
 **IMPLEMENTATION_GUIDE.md**. Live checks still require configured external
-services such as ApeWisdom/yfinance/Discord.
+services such as ApeWisdom/yfinance.
 
 ## Developing
 
@@ -92,8 +89,7 @@ Useful CLI entrypoints (see `python -m gexwheel --help`):
 ```bash
 python -m gexwheel mentions       # daily Reddit scan
 python -m gexwheel screen [--force]  # periodic primary-watchlist screen
-python -m gexwheel morning        # weekday GEX + screen + alerts
-python -m gexwheel test-discord   # one-shot webhook sanity check
+python -m gexwheel morning        # weekday GEX + identify trades
 python -m gexwheel show SYMBOL    # dump latest stored GEX snapshot
 ```
 

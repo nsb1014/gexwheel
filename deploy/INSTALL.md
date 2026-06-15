@@ -6,15 +6,14 @@
 curl -fsSL https://raw.githubusercontent.com/nsb1014/gexwheel/main/install.sh | bash
 ```
 
-or from a checkout: `./install.sh`. It prompts for your Discord webhook
-(hidden) and optional PRAW credentials (hidden), writes
-`~/gexwheel-data/config.yaml` (chmod 600), creates a virtualenv under
+or from a checkout: `./install.sh`. It prompts for optional PRAW credentials
+(hidden), writes `~/gexwheel-data/config.yaml` (chmod 600), creates a virtualenv under
 `~/.local/share/gexwheel/app`, and enables the two systemd **user** timers:
 
 | Timer | Schedule | Job |
 |-------|----------|-----|
 | `gexwheel-mentions.timer` | daily 07:00 ET | Reddit mention scan |
-| `gexwheel-morning.timer` | Mon-Fri 07:15 ET | GEX screen + Discord alerts |
+| `gexwheel-morning.timer` | Mon-Fri 07:15 ET | GEX screen + trade identification |
 
 Useful afterwards:
 
@@ -38,7 +37,7 @@ For image-based hosts (e.g. Bazzite/Silverblue):
 # 1. data dir + config
 mkdir -p ~/gexwheel-data
 cp config/config.example.yaml ~/gexwheel-data/config.yaml
-$EDITOR ~/gexwheel-data/config.yaml   # set discord webhook_url; db_path stays /data/gexwheel.db
+$EDITOR ~/gexwheel-data/config.yaml   # review tunables; db_path stays /data/gexwheel.db
 
 # 2. build image
 podman build -t localhost/gexwheel:latest -f deploy/Containerfile .
@@ -50,7 +49,7 @@ cp deploy/*.timer     ~/.config/systemd/user/
 systemctl --user daemon-reload
 
 # 4. sanity checks
-podman run --rm -v ~/gexwheel-data:/data:Z localhost/gexwheel:latest test-discord
+podman run --rm -v ~/gexwheel-data:/data:Z localhost/gexwheel:latest mentions
 systemctl --user start gexwheel-mentions.service     # one manual run
 journalctl --user -u gexwheel-mentions.service -e
 

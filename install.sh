@@ -7,11 +7,10 @@
 #   curl -fsSL https://raw.githubusercontent.com/nsb1014/gexwheel/main/install.sh | bash
 #
 # Prompts (input is hidden, never echoed, never logged):
-#   - Discord webhook URL (required)
 #   - Reddit/PRAW API credentials (optional - ApeWisdom works without them)
 #
-# Non-interactive use: set GEXWHEEL_WEBHOOK_URL (and optionally
-# GEXWHEEL_PRAW_CLIENT_ID / GEXWHEEL_PRAW_CLIENT_SECRET) in the environment.
+# Non-interactive use: set GEXWHEEL_PRAW_CLIENT_ID / GEXWHEEL_PRAW_CLIENT_SECRET
+# in the environment if using PRAW.
 #
 # Overridable paths:
 #   GEXWHEEL_INSTALL_DIR  (default: ~/.local/share/gexwheel/app)
@@ -89,19 +88,6 @@ mkdir -p "$DATA_DIR"
 if [ -f "$CONFIG_PATH" ]; then
     info "Keeping existing config: $CONFIG_PATH (delete it and re-run to reconfigure)"
 else
-    WEBHOOK_URL="${GEXWHEEL_WEBHOOK_URL:-}"
-    while [ -z "$WEBHOOK_URL" ]; do
-        WEBHOOK_URL="$(prompt_hidden "Discord webhook URL (input hidden): ")"
-        if [ -z "$WEBHOOK_URL" ]; then
-            [ -n "$TTY" ] || die "no terminal available - set GEXWHEEL_WEBHOOK_URL for non-interactive install"
-            warn "a Discord webhook URL is required (Server Settings > Integrations > Webhooks)"
-        fi
-    done
-    case "$WEBHOOK_URL" in
-        https://discord.com/api/webhooks/*|https://discordapp.com/api/webhooks/*) ;;
-        *) warn "that does not look like a Discord webhook URL; continuing anyway" ;;
-    esac
-
     PRAW_ID="${GEXWHEEL_PRAW_CLIENT_ID:-}"
     PRAW_SECRET="${GEXWHEEL_PRAW_CLIENT_SECRET:-}"
     if [ -z "$PRAW_ID" ] && [ -n "$TTY" ]; then
@@ -116,7 +102,6 @@ else
 
     info "Writing $CONFIG_PATH"
     umask 077
-    GEXWHEEL_WEBHOOK_URL="$WEBHOOK_URL" \
     GEXWHEEL_PRAW_CLIENT_ID="$PRAW_ID" \
     GEXWHEEL_PRAW_CLIENT_SECRET="$PRAW_SECRET" \
     GEXWHEEL_DB_PATH="$DATA_DIR/gexwheel.db" \
@@ -129,7 +114,6 @@ with open(src) as f:
     cfg = yaml.safe_load(f)
 
 cfg["db_path"] = os.environ["GEXWHEEL_DB_PATH"]
-cfg["discord"]["webhook_url"] = os.environ["GEXWHEEL_WEBHOOK_URL"]
 
 praw_id = os.environ.get("GEXWHEEL_PRAW_CLIENT_ID", "")
 praw_secret = os.environ.get("GEXWHEEL_PRAW_CLIENT_SECRET", "")
@@ -153,7 +137,7 @@ if command -v systemctl >/dev/null && systemctl --user show-environment >/dev/nu
     for job in mentions morning; do
         case "$job" in
             mentions) DESC="gexwheel - daily Reddit mention scan" ;;
-            morning)  DESC="gexwheel - weekday pre-market GEX screen + Discord alerts" ;;
+            morning)  DESC="gexwheel - weekday pre-market GEX screen + trade identification" ;;
         esac
         cat > "$UNIT_DIR/gexwheel-$job.service" <<UNIT
 [Unit]
@@ -190,24 +174,10 @@ fi
 info "Install complete."
 echo
 echo "  code:    $INSTALL_DIR"
-echo "  config:  $CONFIG_PATH   (chmod 600 - contains your webhook)"
+echo "  config:  $CONFIG_PATH   (chmod 600 - keep private)"
 echo "  data:    $DATA_DIR/gexwheel.db"
 if [ "$SYSTEMD_OK" = 1 ]; then
     echo "  timers:  gexwheel-mentions.timer (daily 07:00 ET)"
     echo "           gexwheel-morning.timer  (Mon-Fri 07:15 ET)"
 fi
 echo
-echo "Verify the webhook now with:"
-echo "  GEXWHEEL_CONFIG=$CONFIG_PATH PYTHONPATH=$INSTALL_DIR/src $VENV/bin/python -m gexwheel test-discord"
-
-if [ -n "$TTY" ]; then
-    ANSWER="$(prompt_plain "Send a test message to your Discord webhook now? [Y/n] " "y")"
-    case "$ANSWER" in
-        n|N|no|NO) ;;
-        *)
-            GEXWHEEL_CONFIG="$CONFIG_PATH" PYTHONPATH="$INSTALL_DIR/src" \
-                "$VENV/bin/python" -m gexwheel test-discord \
-                || warn "test-discord failed - check the webhook URL in $CONFIG_PATH"
-            ;;
-    esac
-fi
