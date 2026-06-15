@@ -12,7 +12,7 @@ next_earnings(symbol) -> date | None
     FUTURE earnings date or None. yfinance is flaky here - wrap everything
     in try/except and return None on any failure (filters treat None as
     'unknown', which PASSES the blackout check but sets values['earnings']
-    = 'unknown' so it shows in the Discord card).
+    = 'unknown' so it shows on the dashboard).
 
 sector(symbol) -> str | None
   * Ticker.info.get('sector') / .get('industry'). Cache in tickers table

@@ -73,7 +73,7 @@ class FilterReport:
 
 @dataclass
 class AlertCard:
-    """Everything the Discord formatter needs to render one alert embed."""
+    """Everything the dashboard needs to render one identified trade."""
     symbol: str
     alert_type: str                # 'put_wall_entry' | 'regime_flip' | 'new_watchlist'
     spot: float

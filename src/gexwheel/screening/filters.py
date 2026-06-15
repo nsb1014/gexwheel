@@ -43,7 +43,7 @@ def run_filters(symbol: str, cfg: dict, conn: sqlite3.Connection, *,
                 gex_profile: GexProfile, asof: date,
                 iv_rank_val: float | None, vrp_val: float | None) -> FilterReport:
     """Stage-2 hard gate. All checks must pass; first failure does NOT short-circuit
-    so the caller gets the full picture for logging/Discord notes."""
+    so the caller gets the full picture for logging/dashboard notes."""
     f = cfg["filters"]
     checks: dict[str, bool] = {}
     values: dict[str, object] = {}
