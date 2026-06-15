@@ -1,0 +1,19 @@
+name: keepalive
+on:
+  schedule:
+    - cron: "0 12 * * 1"   # weekly Monday; re-enables scheduled workflows
+  workflow_dispatch:
+permissions:
+  actions: write
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Re-enable scheduled workflows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for wf in mentions.yml morning.yml; do
+            gh workflow enable "$wf" --repo "$GITHUB_REPOSITORY" || true
+          done

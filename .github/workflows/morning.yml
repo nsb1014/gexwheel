@@ -1,0 +1,19 @@
+name: morning
+on:
+  schedule:
+    - cron: "15 11 * * 1-5"   # ~07:15 ET weekdays (EDT); UTC-only
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Morning GEX + screen + identify trades
+        run: PYTHONPATH=src python -m gexwheel morning

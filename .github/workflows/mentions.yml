@@ -1,0 +1,21 @@
+name: mentions
+on:
+  schedule:
+    - cron: "0 11 * * *"   # ~07:00 America/New_York (EDT); UTC-only, drifts 1h at DST
+  workflow_dispatch:
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Daily mentions scan
+        run: PYTHONPATH=src python -m gexwheel mentions
+      - name: Periodic primary screen (self-throttles to interval)
+        run: PYTHONPATH=src python -m gexwheel screen
