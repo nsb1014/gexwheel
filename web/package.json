@@ -1,0 +1,15 @@
+{
+  "name": "gexwheel-web",
+  "private": true,
+  "version": "0.1.0",
+  "dependencies": {
+    "@libsql/client": "^0.14.0"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  },
+  "scripts": {
+    "dev": "wrangler pages dev public",
+    "deploy": "wrangler pages deploy public"
+  }
+}
