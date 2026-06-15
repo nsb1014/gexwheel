@@ -1,4 +1,4 @@
-"""Morning persists every identified trade (no Discord, no truncation)."""
+"""Morning persists every identified trade (no truncation)."""
 from __future__ import annotations
 
 from datetime import date

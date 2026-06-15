@@ -56,11 +56,10 @@ def run_discovery(conn: sqlite3.Connection, cfg: dict, asof: date) -> list[Veloc
             records = fetch_praw(cfg, asof)
         except Exception as exc:
             log.error("praw fetch also failed: %s", exc)
-            return []
+            raise MentionFetchError(f"all mention sources failed for {asof}") from exc
 
     if not records:
-        log.warning("discovery: no mention records retrieved for %s, skipping velocity", asof)
-        return []
+        raise MentionFetchError(f"no mention records retrieved for {asof}")
 
     # --- 1b. Narrow to primary-watchlist members (entry universe) ---
     primary = set(db.primary_symbols(conn))

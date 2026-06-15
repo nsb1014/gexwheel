@@ -4,6 +4,8 @@ from __future__ import annotations
 from datetime import date, timedelta
 from unittest.mock import patch
 
+import pytest
+
 from gexwheel import db as gdb
 from gexwheel.data.mentions import MentionFetchError
 from gexwheel.jobs import screen as screen_job
@@ -111,6 +113,7 @@ def test_screen_demotes_incumbent_that_now_fails_the_screen(tmp_path):
 
 
 def test_screen_aborts_without_wiping_on_fetch_failure(tmp_path):
+    from gexwheel.jobs import JobError
     cfg = _cfg(tmp_path)
     conn = gdb.connect(cfg["db_path"])
     gdb.upsert_primary(conn, "KEEP", ASOF - timedelta(days=21), metrics={"spot": 20.0})
@@ -118,6 +121,7 @@ def test_screen_aborts_without_wiping_on_fetch_failure(tmp_path):
     conn.close()
     with patch("gexwheel.jobs.screen.fetch_apewisdom",
                side_effect=MentionFetchError("down")):
-        screen_job.run(cfg, force=True)
+        with pytest.raises(JobError):
+            screen_job.run(cfg, force=True)
     conn = gdb.connect(cfg["db_path"])
     assert gdb.primary_symbols(conn) == ["KEEP"]  # untouched

@@ -26,6 +26,7 @@ from ..data.chains import make_chain_source
 from ..data.mentions import MentionFetchError, fetch_apewisdom
 from ..data.prices import daily_closes_and_volumes, sector
 from ..screening.primary import run_primary_screen
+from . import JobError
 
 log = logging.getLogger(__name__)
 
@@ -58,12 +59,12 @@ def run(cfg: dict, *, force: bool = False, asof=None) -> None:
             )
         except MentionFetchError as exc:
             log.error("screen: universe pull failed (%s) — aborting without changes", exc)
-            return
+            raise JobError(f"screen universe pull failed for {asof}") from exc
 
         universe = {r.symbol for r in records} | set(gdb.primary_symbols(conn))
         if not universe:
             log.warning("screen: empty universe for %s — aborting", asof)
-            return
+            raise JobError(f"screen universe empty for {asof}")
 
         chain_src = make_chain_source(cfg)
         data_cfg = cfg["data"]
