@@ -11,7 +11,7 @@ from typing import Any
 
 import yaml
 
-REQUIRED_KEYS = ["db_path", "discord", "data", "reddit", "discovery", "filters", "alerts"]
+REQUIRED_KEYS = ["db_path", "data", "reddit", "discovery", "screen", "filters", "alerts"]
 
 
 def _deep_merge(base: dict, override: dict) -> dict:

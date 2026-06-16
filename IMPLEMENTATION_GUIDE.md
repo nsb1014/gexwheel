@@ -2,6 +2,10 @@
 > tested (see AGENTS.md status table). Kept for reference: the ground rules
 > in items 1–5 and the gotchas list still apply to new work; the build-order
 > table and its "Verify by" column do not gate anything anymore.
+>
+> Discord delivery was removed in the 2026-06-15 cloud migration (see
+> docs/superpowers/specs/2026-06-15-cloud-hosting-and-dashboard-design.md);
+> rows referencing it are historical.
 
 # Implementation guide (for the implementing model)
 

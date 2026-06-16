@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>gexwheel — active watchlist & trades</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>gexwheel</h1>
+    <p id="status" class="status">Loading…</p>
+  </header>
+  <main>
+    <section>
+      <h2>Today's identified trades</h2>
+      <div id="trades" class="cards"></div>
+    </section>
+    <section>
+      <h2>Active watchlist</h2>
+      <div id="watchlist" class="table-wrap"></div>
+    </section>
+    <section>
+      <h2>Recent trades</h2>
+      <div id="recent" class="table-wrap"></div>
+    </section>
+  </main>
+  <footer>
+    Decision support, not financial advice. Data is free, delayed, and may be wrong.
+  </footer>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -6,6 +6,7 @@ Schema bootstrap and migrations are applied idempotently by connect().
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -14,9 +15,24 @@ from .models import GexProfile, MentionRecord
 
 _SCHEMA = Path(__file__).resolve().parents[2] / "schema.sql"
 _MIGRATIONS = Path(__file__).resolve().parents[2] / "migrations"
+_REMOTE_SCHEMES = ("libsql://", "https://", "http://", "wss://", "ws://")
+
+
+def _is_remote(url: str) -> bool:
+    return url.startswith(_REMOTE_SCHEMES)
 
 
 def connect(db_path: str) -> sqlite3.Connection:
+    """Open the DB. A libsql/Turso URL (via TURSO_DATABASE_URL or db_path) routes
+    to the libsql adapter; anything else uses stdlib sqlite3 (local/dev/tests)."""
+    url = os.environ.get("TURSO_DATABASE_URL") or db_path
+    if _is_remote(url):
+        from .db_libsql import LibsqlConnection
+        conn = LibsqlConnection(url, os.environ.get("TURSO_AUTH_TOKEN"))
+        conn.executescript(_SCHEMA.read_text())
+        _apply_migrations(conn)
+        return conn
+
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -144,3 +160,48 @@ def log_alert(conn: sqlite3.Connection, symbol: str, asof: date, alert_type: str
         "INSERT INTO alerts(symbol, date, type, payload_json, sent_at) VALUES (?,?,?,?,?)",
         (symbol, asof.isoformat(), alert_type, json.dumps(payload), sent_at),
     )
+
+
+# ---------- app_state ----------
+
+def get_app_state(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM app_state WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else None
+
+
+def set_app_state(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        """INSERT INTO app_state(key, value) VALUES (?,?)
+           ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+        (key, value),
+    )
+
+
+# ---------- primary watchlist ----------
+
+def primary_symbols(conn: sqlite3.Connection) -> list[str]:
+    rows = conn.execute("SELECT symbol FROM primary_watchlist ORDER BY symbol").fetchall()
+    return [r["symbol"] for r in rows]
+
+
+def upsert_primary(conn: sqlite3.Connection, symbol: str, screened: date, *,
+                   metrics: dict) -> None:
+    """Insert/refresh a primary-watchlist row. `metrics` keys are optional;
+    unknown keys are ignored, the full dict is stored as metrics_json."""
+    conn.execute(
+        """INSERT INTO primary_watchlist(symbol, screened_date, spot, avg_volume,
+               near_oi, spread_pct, vrp, sector, metrics_json)
+           VALUES (?,?,?,?,?,?,?,?,?)
+           ON CONFLICT(symbol) DO UPDATE SET
+               screened_date=excluded.screened_date, spot=excluded.spot,
+               avg_volume=excluded.avg_volume, near_oi=excluded.near_oi,
+               spread_pct=excluded.spread_pct, vrp=excluded.vrp,
+               sector=excluded.sector, metrics_json=excluded.metrics_json""",
+        (symbol, screened.isoformat(), metrics.get("spot"), metrics.get("avg_volume"),
+         metrics.get("near_oi"), metrics.get("spread"), metrics.get("vrp"),
+         metrics.get("sector"), json.dumps(metrics)),
+    )
+
+
+def delete_primary(conn: sqlite3.Connection, symbol: str) -> None:
+    conn.execute("DELETE FROM primary_watchlist WHERE symbol=?", (symbol,))

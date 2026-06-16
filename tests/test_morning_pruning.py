@@ -1,4 +1,4 @@
-"""Watchlist membership and weekly pruning behavior."""
+"""Active-watchlist removal keys off the still-daily checks only."""
 from __future__ import annotations
 
 from datetime import date
@@ -7,12 +7,14 @@ from gexwheel import db as gdb
 from gexwheel.jobs.morning import _update_watchlist_membership
 from gexwheel.models import FilterReport
 
+ASOF = date(2026, 6, 15)
+
 
 def _conn_with_active_watchlist(symbol: str = "TEST"):
     conn = gdb.connect(":memory:")
     conn.execute(
-        "INSERT INTO tickers(symbol, added_date, source, excluded) VALUES (?, ?, ?, 0)",
-        (symbol, "2026-01-01", "manual"),
+        "INSERT INTO tickers(symbol, added_date, source, excluded) VALUES (?, ?, 'manual', 0)",
+        (symbol, "2026-01-01"),
     )
     conn.execute(
         "INSERT INTO watchlist(symbol, date_added, status) VALUES (?, ?, 'active')",
@@ -22,21 +24,14 @@ def _conn_with_active_watchlist(symbol: str = "TEST"):
     return conn
 
 
-def _report(*, values: dict | None = None, **overrides: bool) -> FilterReport:
+def _report(**overrides: bool) -> FilterReport:
     checks = {
-        "price_range": True,
-        "open_interest": True,
-        "iv_rank": True,
-        "vrp": True,
-        "spread": True,
-        "earnings": True,
-        "sector": True,
-        "not_blocklisted": True,
-        "not_cooled_down": True,
-        "regime": True,
+        "price_range": True, "open_interest": True, "iv_rank": True, "vrp": True,
+        "spread": True, "above_50dma": True, "earnings": True, "sector": True,
+        "not_blocklisted": True, "not_cooled_down": True, "regime": True,
     }
     checks.update(overrides)
-    return FilterReport("TEST", all(checks.values()), checks=checks, values=values or {})
+    return FilterReport("TEST", all(checks.values()), checks=checks, values={})
 
 
 def _status_and_notes(conn):
@@ -44,61 +39,22 @@ def _status_and_notes(conn):
     return row["status"], row["notes"]
 
 
-def test_weekly_pruning_removes_watchlist_name_that_fails_open_interest():
+def test_above_50dma_failure_removes_name():
     conn = _conn_with_active_watchlist()
-
-    _update_watchlist_membership(
-        "TEST", {"TEST"}, _report(open_interest=False), conn, date(2026, 6, 15)
-    )
-
-    assert _status_and_notes(conn) == ("removed", "weekly prune: open_interest")
+    _update_watchlist_membership("TEST", _report(above_50dma=False), conn, ASOF)
+    assert _status_and_notes(conn) == ("removed", "daily fail: above_50dma")
 
 
-def test_weekly_pruning_waits_until_week_start_for_volatility_failures():
+def test_earnings_failure_removes_name():
     conn = _conn_with_active_watchlist()
-
-    _update_watchlist_membership(
-        "TEST", {"TEST"}, _report(iv_rank=False, vrp=False), conn, date(2026, 6, 16)
-    )
-
-    assert _status_and_notes(conn) == ("active", None)
+    _update_watchlist_membership("TEST", _report(earnings=False), conn, ASOF)
+    assert _status_and_notes(conn) == ("removed", "daily fail: earnings")
 
 
-def test_daily_structural_failure_still_removes_watchlist_name():
+def test_structural_failure_does_not_remove_active_name():
+    # price/oi/spread/iv/vrp/sector are the SCREEN's job now, not a daily removal reason
     conn = _conn_with_active_watchlist()
-
     _update_watchlist_membership(
-        "TEST", {"TEST"}, _report(sector=False), conn, date(2026, 6, 16)
+        "TEST", _report(open_interest=False, iv_rank=False, sector=False), conn, ASOF
     )
-
-    assert _status_and_notes(conn) == ("removed", "structural fail: sector")
-
-
-def test_weekly_pruning_ignores_transient_quote_failures():
-    conn = _conn_with_active_watchlist()
-
-    _update_watchlist_membership(
-        "TEST", {"TEST"}, _report(spread=False), conn, date(2026, 6, 15)
-    )
-
-    assert _status_and_notes(conn) == ("active", None)
-
-
-def test_weekly_pruning_does_not_remove_when_no_quote_causes_durable_failures():
-    conn = _conn_with_active_watchlist()
-
-    _update_watchlist_membership(
-        "TEST",
-        {"TEST"},
-        _report(
-            spread=False,
-            open_interest=False,
-            iv_rank=False,
-            vrp=False,
-            values={"spread": "no_quote"},
-        ),
-        conn,
-        date(2026, 6, 15),
-    )
-
     assert _status_and_notes(conn) == ("active", None)

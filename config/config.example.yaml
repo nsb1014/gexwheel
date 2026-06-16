@@ -1,11 +1,6 @@
 # gexwheel configuration. Copy to config.yaml (mounted at /data/config.yaml in container).
 db_path: /data/gexwheel.db
 
-discord:
-  webhook_url: "https://discord.com/api/webhooks/CHANGE_ME"
-  username: "GEX Wheel"
-  max_alerts_per_run: 8          # don't spam the channel
-
 data:
   chain_source: yfinance         # 'yfinance' now; 'polygon' interface stubbed for later
   polygon_api_key: ""
@@ -28,6 +23,12 @@ discovery:                       # Stage 1 - cast wide
   baseline_floor: 10             # trailing avg must be >= 10 mentions/day
   min_history_days: 5            # need at least this many days of history
   max_daily_mentions: 1000       # ignore permanent meme residents above this baseline
+
+screen:                          # periodic primary-watchlist screen
+  primary_screen_interval_days: 21
+  screen_pages: 5                # wider ApeWisdom pull than daily apewisdom_pages
+  avg_volume_days: 20            # window for the average-daily-volume gate
+  min_avg_volume: 1000000        # NEW gate: avg daily shares
 
 filters:                         # Stage 2 - hard gate, no overrides
   price_min: 10.0

@@ -5,6 +5,6 @@ Pipeline (see README.md):
   Stage 2 hard filters (liquidity / VRP / price / regime / exclusions) ->
   watchlist DB ->
   GEX walls per ticker ->
-  Discord alerts when spot approaches a qualifying put wall.
+  dashboard-published trades when spot approaches a qualifying put wall.
 """
 __version__ = "0.1.0"

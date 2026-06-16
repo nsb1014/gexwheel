@@ -15,7 +15,7 @@ def test_connect_records_initial_migration(tmp_path):
         "SELECT version FROM schema_migrations ORDER BY version"
     ).fetchall()
 
-    assert [r["version"] for r in rows] == ["0001_initial"]
+    assert [r["version"] for r in rows] == ["0001_initial", "0002_primary_watchlist"]
 
 
 def test_apply_migrations_runs_new_files_once_in_order(tmp_path):
@@ -99,3 +99,34 @@ def test_connect_preserves_existing_database_rows_while_recording_baseline(tmp_p
 
     assert dict(watchlist_row) == {"symbol": "KEEP", "status": "active"}
     assert migration_row["version"] == "0001_initial"
+
+
+def test_migration_0002_adds_primary_tables_and_preserves_data(tmp_path):
+    db_path = tmp_path / "existing.db"
+    seed = sqlite3.connect(db_path)
+    seed.execute(
+        """CREATE TABLE watchlist (
+               symbol TEXT PRIMARY KEY, date_added TEXT NOT NULL,
+               status TEXT NOT NULL DEFAULT 'active', last_score REAL, notes TEXT)"""
+    )
+    seed.execute("INSERT INTO watchlist(symbol, date_added) VALUES ('KEEP', '2026-01-01')")
+    seed.commit()
+    seed.close()
+
+    conn = gdb.connect(str(db_path))
+
+    assert conn.execute(
+        "SELECT symbol FROM watchlist WHERE symbol='KEEP'"
+    ).fetchone()["symbol"] == "KEEP"
+    tables = {
+        r["name"]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    assert {"primary_watchlist", "app_state"} <= tables
+    versions = [
+        r["version"]
+        for r in conn.execute("SELECT version FROM schema_migrations ORDER BY version").fetchall()
+    ]
+    assert "0002_primary_watchlist" in versions

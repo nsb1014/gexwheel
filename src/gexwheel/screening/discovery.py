@@ -7,13 +7,14 @@ Steps:
      - on MentionFetchError and cfg['reddit']['source'] allows it, try praw;
        if both fail, log ERROR and return [] (the job continues - GEX
        refresh of the existing watchlist must still run).
-  2. db.record_mention() for every record, commit once.
+  1b. Narrow to primary-watchlist members only (entry universe).
+  2. db.record_mention() for every remaining record, commit once.
   3. For each record: history = db.mention_history(days=8, source=<same>);
      drop today's row from history if present (compare iso date), pass the
      remaining counts (most recent first) to analytics.velocity.mention_velocity
      with cfg['discovery'] params.
-  4. For triggered results: db.upsert_ticker(source='wsb_velocity').
-     DO NOT add to watchlist here - Stage 2 owns that decision.
+  4. For triggered results: db.upsert_ticker(source='wsb_velocity') AND
+     db.watchlist_add() — promotion to the secondary/active watchlist happens here.
   5. Return triggered list sorted by ratio desc.
 """
 from __future__ import annotations
@@ -55,10 +56,22 @@ def run_discovery(conn: sqlite3.Connection, cfg: dict, asof: date) -> list[Veloc
             records = fetch_praw(cfg, asof)
         except Exception as exc:
             log.error("praw fetch also failed: %s", exc)
-            return []
+            raise MentionFetchError(f"all mention sources failed for {asof}") from exc
 
     if not records:
-        log.warning("discovery: no mention records retrieved for %s, skipping velocity", asof)
+        raise MentionFetchError(f"no mention records retrieved for {asof}")
+
+    # --- 1b. Narrow to primary-watchlist members (entry universe) ---
+    primary = set(db.primary_symbols(conn))
+    if not primary:
+        log.warning(
+            "discovery: primary watchlist empty — run `python -m gexwheel screen --force` "
+            "to seed it; skipping velocity for %s", asof,
+        )
+        return []
+    records = [r for r in records if r.symbol in primary]
+    if not records:
+        log.info("discovery: no primary-member mentions for %s", asof)
         return []
 
     # --- 2. Persist all mention records ---
@@ -87,7 +100,9 @@ def run_discovery(conn: sqlite3.Connection, cfg: dict, asof: date) -> list[Veloc
         )
 
         if result.triggered:
+            # tickers row keeps cooldown/sector metadata; watchlist promotes to secondary/active
             db.upsert_ticker(conn, rec.symbol, source="wsb_velocity", asof=asof)
+            db.watchlist_add(conn, rec.symbol, asof)
             triggered.append(result)
 
     conn.commit()

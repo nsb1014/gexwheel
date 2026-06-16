@@ -73,7 +73,7 @@ class FilterReport:
 
 @dataclass
 class AlertCard:
-    """Everything the Discord formatter needs to render one alert embed."""
+    """Everything the dashboard needs to render one identified trade."""
     symbol: str
     alert_type: str                # 'put_wall_entry' | 'regime_flip' | 'new_watchlist'
     spot: float
@@ -86,3 +86,12 @@ class AlertCard:
     score: float
     suggested_entry: str           # human-readable, e.g. "CSP 9.5P 30-45 DTE (at put wall)"
     notes: str = ""
+
+
+@dataclass
+class PrimaryScreenReport:
+    """Periodic structural-screen result. `passed` only True if every check is True."""
+    symbol: str
+    passed: bool
+    checks: dict[str, bool] = field(default_factory=dict)
+    values: dict[str, float | str | None] = field(default_factory=dict)

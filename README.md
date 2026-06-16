@@ -2,62 +2,34 @@
 
 Gamma-wall driven wheel-entry alerting. Daily Reddit mention-velocity discovery
 feeds a hard screening gate; survivors get GEX profiles computed from option
-open interest; Discord alerts fire when spot approaches a persistent put wall.
+open interest; identified trades are published to a dashboard when spot approaches a persistent put wall.
 
 ```
-mentions_daily (every day 07:00 ET)          morning (Mon-Fri 07:15 ET)
-┌──────────────────────────────┐   ┌─────────────────────────────────────────┐
-│ ApeWisdom/PRAW mention pull  │   │ for each watchlist + discovery ticker:  │
-│ -> mentions table            │   │   yfinance chain -> GEX profile/walls   │
-│ -> velocity (3x over 7d avg, │   │   IV rank / realized vol / VRP          │
-│    baseline floor 10)        │   │   Stage-2 hard filters (no overrides)   │
-│ -> tickers table (candidates)│   │   wall-break -> bench w/ cooldown       │
-└──────────────────────────────┘   │   persistent wall + proximity -> score  │
-                                   │   -> Discord webhook (top N embeds)     │
-                                   └─────────────────────────────────────────┘
-                       SQLite (gexwheel.db) is the spine: mentions,
-                       gex_snapshots, vol_stats, tickers, watchlist, alerts
+screen (~21d)                    mentions_daily (07:00 ET)          morning (Mon-Fri 07:15 ET)
+┌────────────────────────────┐   ┌──────────────────────────────┐   ┌─────────────────────────────────────────┐
+│ ApeWisdom → structural     │   │ velocity on primary members  │   │ active watchlist only:                  │
+│ screen → primary_watchlist │   │ → promote to active watchlist│   │ chains → GEX → filters → dashboard    │
+└────────────────────────────┘   └──────────────────────────────┘   └─────────────────────────────────────────┘
+                       Turso (hosted libSQL) is the spine in production; local dev uses SQLite.
 ```
 
-## Install (Linux)
+## Deploy
 
-Requirements: Linux with `git` and Python 3.10+ (with venv support, e.g.
-`sudo apt install git python3-venv`). A systemd user session is used for
-scheduling if available; otherwise the installer tells you what to schedule
-yourself.
+gexwheel runs on free cloud services — no personal machine required.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/nsb1014/gexwheel/main/install.sh | bash
-```
+- **Jobs:** GitHub Actions cron (`.github/workflows/`)
+- **Database:** Turso (hosted libSQL)
+- **Dashboard:** Cloudflare Pages (`web/`)
 
-The installer:
-
-1. clones the repo to `~/.local/share/gexwheel/app` (or installs in place if
-   you run `./install.sh` from a checkout) and builds a private virtualenv;
-2. prompts for your **Discord webhook URL** (required, input hidden) and
-   **Reddit/PRAW API credentials** (optional, input hidden - ApeWisdom needs
-   no key, PRAW just adds a fallback source);
-3. writes `~/gexwheel-data/config.yaml` with permissions `600`;
-4. installs and enables systemd user timers for the two jobs and offers a
-   one-shot `test-discord` to verify the webhook.
-
-Non-interactive installs: set `GEXWHEEL_WEBHOOK_URL` (and optionally
-`GEXWHEEL_PRAW_CLIENT_ID` / `GEXWHEEL_PRAW_CLIENT_SECRET`) in the environment.
-Paths are overridable via `GEXWHEEL_INSTALL_DIR` and `GEXWHEEL_DATA_DIR`.
-
-Re-running the installer updates the code and dependencies but keeps your
-existing `config.yaml`; delete it and re-run to reconfigure. A
-container-based deployment (podman quadlets) is documented in
-[deploy/INSTALL.md](./deploy/INSTALL.md).
+Full setup: [deploy/INSTALL.md](./deploy/INSTALL.md). Dashboard: [web/README.md](./web/README.md).
 
 ## Configuration
 
 All tunables (price band, OI/spread/IV-rank gates, proximity thresholds,
-cooldowns, subreddit filter, ...) live in `~/gexwheel-data/config.yaml` and
-are documented inline in
-[config/config.example.yaml](./config/config.example.yaml). The file contains
-your webhook URL and any PRAW credentials - keep it private (the installer
-sets `chmod 600`).
+cooldowns, subreddit filter, ...) are documented inline in
+[config/config.example.yaml](./config/config.example.yaml). GitHub Actions jobs
+use those defaults plus `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` from repo secrets.
+For local runs, copy the example to `config/config.yaml` or set `GEXWHEEL_CONFIG`.
 
 ## Key design facts
 
@@ -76,12 +48,12 @@ sets `chmod 600`).
 ## Status
 
 The core pipeline modules are implemented and covered by local tests:
-analytics, data adapters, discovery, filters, alert scoring/Discord delivery,
-jobs, config, models, migrations, and SQLite helpers.
+analytics, data adapters, discovery, filters, alert scoring, jobs, config, models,
+migrations, and SQLite helpers. Identified trades are published to the Cloudflare dashboard.
 
 The historical build order and live smoke-test checklist are documented in
 **IMPLEMENTATION_GUIDE.md**. Live checks still require configured external
-services such as ApeWisdom/yfinance/Discord.
+services such as ApeWisdom/yfinance.
 
 ## Developing
 
@@ -96,13 +68,13 @@ Useful CLI entrypoints (see `python -m gexwheel --help`):
 
 ```bash
 python -m gexwheel mentions       # daily Reddit scan
-python -m gexwheel morning        # weekday GEX + screen + alerts
-python -m gexwheel test-discord   # one-shot webhook sanity check
+python -m gexwheel screen [--force]  # periodic primary-watchlist screen
+python -m gexwheel morning        # weekday GEX + identify trades
 python -m gexwheel show SYMBOL    # dump latest stored GEX snapshot
 ```
 
-Contributor ground rules are in [AGENTS.md](./AGENTS.md); deployment details
-in [deploy/INSTALL.md](./deploy/INSTALL.md).
+Contributor ground rules are in [AGENTS.md](./AGENTS.md). Cloud deploy:
+[deploy/INSTALL.md](./deploy/INSTALL.md); dashboard: [web/README.md](./web/README.md).
 
 ## License
 

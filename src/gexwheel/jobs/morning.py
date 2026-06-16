@@ -26,9 +26,8 @@ run(cfg) -> None
     8. if report.passed and scoring.should_alert(profile, cfg, conn, asof):
          build AlertCard (suggested_entry per scoring docstring), collect
 
-  Finally: sent_cards = discord.send_alerts(cards, cfg); db.log_alert for each
-  candidate card (sent_at = iso now only when that card was actually posted);
-  commit; one INFO summary line; close.
+  Finally: persist every identified trade to the alerts table (the dashboard
+  reads them); commit; one INFO summary line; close.
 """
 from __future__ import annotations
 
@@ -37,7 +36,6 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from .. import db as gdb
-from ..alerts import discord as disc
 from ..alerts.scoring import score, should_alert
 from ..alerts.scoring import suggested_entry as make_entry
 from ..analytics import gex as gex_mod
@@ -50,12 +48,13 @@ from ..screening.filters import run_filters
 
 log = logging.getLogger(__name__)
 
-_DAILY_REMOVE_CHECKS = ("price_range", "sector", "not_blocklisted")
-_WEEKLY_PRUNE_CHECKS = ("price_range", "open_interest", "iv_rank", "vrp")
+# Active names are demoted only on the still-daily checks. Structural gating
+# (price/volume/oi/spread/vrp/sector/blocklist) lives in the periodic screen.
+_DAILY_REMOVE_CHECKS = ("above_50dma", "earnings")
 
 
 def run(cfg: dict) -> None:
-    """Weekday pre-market: refresh GEX, run filters, fire Discord alerts."""
+    """Weekday pre-market: refresh GEX, run filters, identify and persist trades."""
     tz = ZoneInfo(cfg.get("timezone", "America/New_York"))
     asof = datetime.now(tz).date()
     log.info("morning: starting for %s", asof)
@@ -66,18 +65,11 @@ def run(cfg: dict) -> None:
     alert_cfg = cfg["alerts"]
     cooldown_days = alert_cfg.get("cooldown_days", 5)
 
-    # Candidates = active watchlist + new discovery tickers not yet on watchlist
-    watchlist = set(gdb.watchlist_active(conn))
-    discovery_rows = conn.execute(
-        """SELECT symbol FROM tickers
-           WHERE excluded=0
-           AND (cooldown_until IS NULL OR cooldown_until < ?)
-           AND symbol NOT IN (SELECT symbol FROM watchlist)""",
-        (asof.isoformat(),),
-    ).fetchall()
-    candidates = list(watchlist) + [r["symbol"] for r in discovery_rows]
-    log.info("morning: %d candidates (%d watchlist, %d new discovery)",
-             len(candidates), len(watchlist), len(discovery_rows))
+    # Candidates = the active (secondary) watchlist only. Structural entry-gating
+    # now lives in the periodic screen (jobs/screen.py); discovery promotes names
+    # onto this list via velocity. See specs/2026-06-15-screening-inversion-design.md.
+    candidates = sorted(gdb.watchlist_active(conn))
+    log.info("morning: %d active watchlist candidates", len(candidates))
 
     cards: list[AlertCard] = []
     alert_payloads: dict[tuple[str, str], dict] = {}
@@ -86,39 +78,25 @@ def run(cfg: dict) -> None:
         try:
             _process_symbol(
                 symbol, asof, conn, chain_src, cfg, data_cfg,
-                cooldown_days, watchlist, cards, alert_payloads
+                cooldown_days, cards, alert_payloads
             )
         except Exception as exc:
             log.error("morning: unhandled error for %s: %s", symbol, exc, exc_info=True)
 
-    # Send alerts
+    # Persist every identified trade (the dashboard is the delivery surface now).
     if cards:
-        # send_alerts sorts and truncates to max_alerts_per_run internally;
-        # truncate here too so only attempted cards are logged (re-sorting an
-        # already-truncated list inside send_alerts is a no-op).
-        max_cards = cfg["discord"].get("max_alerts_per_run", 8)
-        top_cards = sorted(cards, key=lambda c: c.score, reverse=True)[:max_cards]
-        sent_cards = disc.send_alerts(top_cards, cfg)
-        sent_keys = {(c.symbol, c.alert_type) for c in sent_cards}
         now_iso = datetime.now(tz).isoformat()
-        for card in top_cards:
-            delivered = (card.symbol, card.alert_type) in sent_keys
-            gdb.log_alert(
-                conn, card.symbol, asof, card.alert_type,
-                alert_payloads[(card.symbol, card.alert_type)],
-                now_iso if delivered else None,
-            )
-        conn.commit()
-        log.info("morning: sent %d/%d alerts", len(sent_cards), len(top_cards))
+        _persist_trades(conn, cards, alert_payloads, asof, now_iso)
+        log.info("morning: identified %d trades", len(cards))
     else:
-        log.info("morning: no alerts generated")
+        log.info("morning: no trades identified")
 
     conn.commit()
     conn.close()
 
 
 def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
-                    cooldown_days, watchlist, cards, alert_payloads):
+                    cooldown_days, cards, alert_payloads):
     """Per-symbol processing block. All exceptions bubble to the caller's handler."""
 
     # 1. Fetch chain
@@ -176,7 +154,7 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
     log.info("morning: %s filters passed=%s checks=%s", symbol, report.passed, report.checks)
 
     # Promote/demote watchlist membership
-    _update_watchlist_membership(symbol, watchlist, report, conn, asof)
+    _update_watchlist_membership(symbol, report, conn, asof)
 
     # 7. Wall-break check
     if profile.put_wall is not None and spot < profile.put_wall:
@@ -215,27 +193,17 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
         log.info("morning: %s generated alert score=%.1f", symbol, card_score)
 
 
-def _update_watchlist_membership(symbol: str, watchlist: set[str], report: FilterReport,
-                                 conn, asof) -> None:
-    """Promote new passing names, remove active names that no longer meet durable gates."""
-    if symbol not in watchlist:
-        if report.passed:
-            gdb.watchlist_add(conn, symbol, asof, score=None)
-        return
+def _update_watchlist_membership(symbol: str, report: FilterReport, conn, asof) -> None:
+    """Demote an active name only when a still-daily check fails.
 
+    Promotion onto the watchlist happens in screening.discovery (velocity);
+    structural entry-gating happens in jobs.screen. The morning job's job here
+    is just to drop names that fail a daily, time-sensitive check.
+    """
     failures = _failed_checks(report, _DAILY_REMOVE_CHECKS)
-    reason_prefix = "structural fail"
-
-    if not failures and asof.weekday() == 0:
-        if report.values.get("spread") == "no_quote":
-            return
-        failures = _failed_checks(report, _WEEKLY_PRUNE_CHECKS)
-        reason_prefix = "weekly prune"
-
     if not failures:
         return
-
-    note = f"{reason_prefix}: {', '.join(failures)}"
+    note = f"daily fail: {', '.join(failures)}"
     conn.execute(
         "UPDATE watchlist SET status='removed', notes=? WHERE symbol=?",
         (note, symbol),
@@ -267,6 +235,20 @@ def _velocity_ratio(conn, symbol: str, asof, source: str) -> float | None:
         return row["mentions"] / row["baseline"]
     except (TypeError, ZeroDivisionError):
         return None
+
+
+def _persist_trades(conn, cards, alert_payloads, asof, now_iso: str) -> None:
+    """Write every identified trade to the alerts table, highest score first.
+
+    There is no separate delivery step anymore: the dashboard reads these rows,
+    so sent_at records the identification/publish time for every trade.
+    """
+    for card in sorted(cards, key=lambda c: c.score, reverse=True):
+        gdb.log_alert(
+            conn, card.symbol, asof, card.alert_type,
+            alert_payloads[(card.symbol, card.alert_type)],
+            now_iso,
+        )
 
 
 def _alert_notes(profile, report: FilterReport) -> str:
