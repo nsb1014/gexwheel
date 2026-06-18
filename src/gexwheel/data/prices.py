@@ -117,6 +117,46 @@ def avg_volume(volumes: list[float], window: int) -> float:
     return sum(tail) / len(tail)
 
 
+def current_spot(symbol: str) -> float:
+    """Latest price via yfinance fast_info, falling back to the most recent close."""
+    try:
+        ticker = yf.Ticker(symbol)
+        try:
+            price = ticker.fast_info.get("last_price") or ticker.fast_info.get("lastPrice")
+            if price and float(price) > 0:
+                return float(price)
+        except Exception:
+            pass
+        hist = _history_with_retry(ticker, "1d")
+        if hist is not None and not hist.empty:
+            return float(hist["Close"].iloc[-1])
+    except Exception as exc:
+        raise PriceFetchError(f"spot fetch failed for {symbol}: {exc}") from exc
+    raise PriceFetchError(f"no spot price for {symbol}")
+
+
+def session_low(symbol: str) -> float:
+    """Lowest traded price so far in the current regular session (America/New_York)."""
+    try:
+        ticker = yf.Ticker(symbol)
+        hist = _history_with_retry(ticker, "1d")
+        if hist is None or hist.empty:
+            raise PriceFetchError(f"no intraday history for {symbol}")
+        today = datetime.now(_MARKET_TZ).date()
+        lows = []
+        for ts, row in hist.iterrows():
+            day = ts.date() if hasattr(ts, "date") else ts
+            if day == today and row["Low"] == row["Low"]:
+                lows.append(float(row["Low"]))
+        if not lows:
+            raise PriceFetchError(f"no session low yet for {symbol}")
+        return min(lows)
+    except PriceFetchError:
+        raise
+    except Exception as exc:
+        raise PriceFetchError(f"session low failed for {symbol}: {exc}") from exc
+
+
 def next_earnings(symbol: str) -> date | None:
     """Return the next future earnings date or None on any failure / no data."""
     try:

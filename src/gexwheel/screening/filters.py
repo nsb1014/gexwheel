@@ -7,7 +7,8 @@ All inputs are passed in (no network calls in this module - keeps it unit
 testable with synthetic data). Checks, ALL must pass; record each into
 report.checks and the measured value into report.values:
 
-  price_range     : cfg price_min <= spot <= price_max
+  price_range     : spot >= price_min; spot <= price_max when price_max is set
+                    (null/omitted = no upper cap — user max is a dashboard filter)
   above_50dma     : spot > sma(closes, 50)        [skip if cfg flag false -> True]
   open_interest   : sum of OI across the 3 strikes nearest spot (calls+puts,
                     nearest expiry > 7 DTE) >= min_open_interest
@@ -38,6 +39,15 @@ from ..models import FilterReport, GexProfile, OptionQuote
 from .chain_metrics import atm_call_spread, near_oi_sum
 
 
+def check_price_range(spot: float, price_min: float, price_max: float | None) -> bool:
+    """True when spot is at or above price_min and (if set) at or below price_max."""
+    if spot < price_min:
+        return False
+    if price_max is not None and spot > price_max:
+        return False
+    return True
+
+
 def run_filters(symbol: str, cfg: dict, conn: sqlite3.Connection, *,
                 spot: float, quotes: list[OptionQuote], closes: list[float],
                 gex_profile: GexProfile, asof: date,
@@ -48,8 +58,8 @@ def run_filters(symbol: str, cfg: dict, conn: sqlite3.Connection, *,
     checks: dict[str, bool] = {}
     values: dict[str, object] = {}
 
-    # --- price_range ---
-    checks["price_range"] = f["price_min"] <= spot <= f["price_max"]
+    # --- price_range (pipeline floor only; optional max; UI applies user band) ---
+    checks["price_range"] = check_price_range(spot, f["price_min"], f.get("price_max"))
     values["spot"] = spot
 
     # --- above_50dma ---

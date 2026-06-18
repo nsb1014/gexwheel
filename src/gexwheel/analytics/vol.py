@@ -45,19 +45,9 @@ def realized_vol(closes: list[float], window: int = 20) -> float:
 
 def atm_iv(quotes: list[OptionQuote], spot: float, asof: date, target_dte: int = 30) -> float | None:
     """Return average IV of the call+put nearest spot on the expiry closest to target_dte (>7 DTE)."""
-    expiries = sorted({q.expiry for q in quotes
-                       if (q.expiry - asof).days > 7
-                       and (q.expiry - asof).days <= 365},
-                      key=lambda e: abs((e - asof).days - target_dte))
-    for exp in expiries:
-        chain = [q for q in quotes if q.expiry == exp and q.iv > 0]
-        calls = sorted([q for q in chain if q.kind == "C"], key=lambda q: abs(q.strike - spot))
-        puts  = sorted([q for q in chain if q.kind == "P"], key=lambda q: abs(q.strike - spot))
-        ivs = []
-        if calls:
-            ivs.append(calls[0].iv)
-        if puts:
-            ivs.append(puts[0].iv)
+    for exp in _expiries_near_target(quotes, asof, target_dte):
+        call, put = _atm_legs(quotes, spot, exp)
+        ivs = [q.iv for q in (call, put) if q is not None and q.iv > 0]
         if ivs:
             return sum(ivs) / len(ivs)
     return None
@@ -69,3 +59,38 @@ def iv_rank(current_iv: float, iv_history: list[float]) -> float | None:
         return None
     below = sum(1 for h in iv_history if h < current_iv)
     return 100.0 * below / len(iv_history)
+
+
+def _expiries_near_target(quotes: list[OptionQuote], asof: date, target_dte: int = 30) -> list[date]:
+    """Expiries with 7 < DTE <= 365, nearest target_dte first."""
+    return sorted(
+        {q.expiry for q in quotes
+         if (q.expiry - asof).days > 7 and (q.expiry - asof).days <= 365},
+        key=lambda e: abs((e - asof).days - target_dte),
+    )
+
+
+def _atm_legs(quotes: list[OptionQuote], spot: float, expiry: date) -> tuple[OptionQuote | None, OptionQuote | None]:
+    chain = [q for q in quotes if q.expiry == expiry]
+    calls = sorted([q for q in chain if q.kind == "C"], key=lambda q: abs(q.strike - spot))
+    puts = sorted([q for q in chain if q.kind == "P"], key=lambda q: abs(q.strike - spot))
+    return (calls[0] if calls else None, puts[0] if puts else None)
+
+
+def implied_move_pct(
+    quotes: list[OptionQuote], spot: float, asof: date, target_dte: int = 30,
+) -> float | None:
+    """Approximate implied move to expiry: ATM straddle % of spot, else IV*sqrt(T)."""
+    if spot <= 0:
+        return None
+    for exp in _expiries_near_target(quotes, asof, target_dte):
+        call, put = _atm_legs(quotes, spot, exp)
+        if call is not None and put is not None:
+            if (call.bid > 0 or call.ask > 0) and (put.bid > 0 or put.ask > 0):
+                return (call.mid + put.mid) / spot
+        ivs = [q.iv for q in (call, put) if q is not None and q.iv > 0]
+        if ivs:
+            dte = (exp - asof).days
+            iv = sum(ivs) / len(ivs)
+            return iv * math.sqrt(dte / 365.0)
+    return None

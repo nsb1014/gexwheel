@@ -2,7 +2,8 @@
 
   python -m gexwheel mentions          # daily Reddit scan
   python -m gexwheel screen [--force]  # periodic primary-watchlist screen
-  python -m gexwheel morning           # weekday GEX + screen + alerts
+  python -m gexwheel morning-snapshot  # ~10:15 ET spot₀ for active watchlist
+  python -m gexwheel morning           # ~10:45 ET GEX + identify trades
   python -m gexwheel show <SYMBOL>     # dump latest stored GEX snapshot (debug)
 """
 from __future__ import annotations
@@ -27,6 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     screen_p.add_argument("--force", action="store_true",
                           help="ignore the interval throttle and re-screen now")
     sub.add_parser("morning")
+    sub.add_parser("morning-snapshot")
     show = sub.add_parser("show")
     show.add_argument("symbol")
     args = p.parse_args(argv)
@@ -42,6 +44,9 @@ def main(argv: list[str] | None = None) -> int:
     elif args.cmd == "morning":
         from .jobs import morning
         morning.run(cfg)
+    elif args.cmd == "morning-snapshot":
+        from .jobs import morning_snapshot
+        morning_snapshot.run(cfg)
     elif args.cmd == "show":
         conn = db.connect(cfg["db_path"])
         row = conn.execute(

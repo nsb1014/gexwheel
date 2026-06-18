@@ -1,7 +1,7 @@
-name: morning
+name: morning-snapshot
 on:
   schedule:
-    - cron: "45 14 * * 1-5"   # ~10:45 ET weekdays (EDT); UTC-only — drifts 1h at DST
+    - cron: "15 14 * * 1-5"   # ~10:15 ET weekdays (EDT); UTC-only — drifts 1h at DST
   workflow_dispatch:
 jobs:
   run:
@@ -15,5 +15,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - name: Morning GEX + identify trades (spot₁ + options)
-        run: PYTHONPATH=src python -m gexwheel morning
+      - name: Morning spot₀ snapshot (equity only)
+        run: PYTHONPATH=src python -m gexwheel morning-snapshot

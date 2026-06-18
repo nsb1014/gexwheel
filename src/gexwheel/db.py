@@ -177,6 +177,24 @@ def set_app_state(conn: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
+def morning_spot0_key(asof: date) -> str:
+    return f"morning_spot0_{asof.isoformat()}"
+
+
+def set_morning_spot0(conn: sqlite3.Connection, asof: date, spots: dict[str, float], captured_at: str) -> None:
+    set_app_state(conn, morning_spot0_key(asof), json.dumps({"captured_at": captured_at, "spots": spots}))
+
+
+def get_morning_spot0(conn: sqlite3.Connection, asof: date) -> dict[str, float]:
+    raw = get_app_state(conn, morning_spot0_key(asof))
+    if not raw:
+        return {}
+    try:
+        return {k: float(v) for k, v in json.loads(raw).get("spots", {}).items()}
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return {}
+
+
 # ---------- primary watchlist ----------
 
 def primary_symbols(conn: sqlite3.Connection) -> list[str]:
