@@ -15,6 +15,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
+      - name: Verify Turso credentials
+        run: |
+          test -n "$TURSO_DATABASE_URL" || { echo "::error::TURSO_DATABASE_URL repo secret is missing — see deploy/INSTALL.md"; exit 1; }
+          test -n "$TURSO_AUTH_TOKEN" || { echo "::error::TURSO_AUTH_TOKEN repo secret is missing — see deploy/INSTALL.md"; exit 1; }
       - name: Daily mentions scan
         run: PYTHONPATH=src python -m gexwheel mentions
       - name: Periodic primary screen (self-throttles to interval)

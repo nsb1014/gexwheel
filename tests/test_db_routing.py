@@ -29,6 +29,15 @@ def test_libsql_url_routes_to_adapter(monkeypatch):
     assert out is fake_conn
 
 
+def test_production_db_path_requires_turso(monkeypatch):
+    monkeypatch.delenv("TURSO_DATABASE_URL", raising=False)
+    try:
+        gdb.connect("/data/gexwheel.db")
+        assert False, "expected RuntimeError"
+    except RuntimeError as exc:
+        assert "TURSO_DATABASE_URL" in str(exc)
+
+
 def test_env_url_overrides_local_path(monkeypatch):
     monkeypatch.setenv("TURSO_DATABASE_URL", "libsql://from-env.turso.io")
     fake_conn = MagicMock()
