@@ -1,7 +1,7 @@
 name: morning
 on:
   schedule:
-    - cron: "15 11 * * 1-5"   # ~07:15 ET weekdays (EDT); UTC-only
+    - cron: "45 14 * * 1-5"   # ~10:45 ET weekdays (EDT); UTC-only — drifts 1h at DST
   workflow_dispatch:
 jobs:
   run:
@@ -15,5 +15,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt
-      - name: Morning GEX + screen + identify trades
+      - name: Verify Turso credentials
+        run: |
+          test -n "$TURSO_DATABASE_URL" || { echo "::error::TURSO_DATABASE_URL repo secret is missing — see deploy/INSTALL.md"; exit 1; }
+          test -n "$TURSO_AUTH_TOKEN" || { echo "::error::TURSO_AUTH_TOKEN repo secret is missing — see deploy/INSTALL.md"; exit 1; }
+      - name: Morning GEX + identify trades (spot₁ + options)
         run: PYTHONPATH=src python -m gexwheel morning

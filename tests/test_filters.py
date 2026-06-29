@@ -17,7 +17,7 @@ SPOT = 20.0
 
 BASE_CFG = {
     "filters": {
-        "price_min": 10.0, "price_max": 45.0,
+        "price_min": 5.0, "price_max": None,
         "min_open_interest": 500, "max_spread_pct": 0.10,
         "min_iv_rank": 50.0, "min_vrp": 0.0,
         "require_above_50dma": True,
@@ -82,18 +82,28 @@ def test_all_checks_pass_for_clean_setup():
     assert all(report.checks.values()), report.checks
 
 
-def test_price_out_of_range_fails_only_price_check():
+def test_price_below_min_fails_only_price_check():
     report = run_filters(
         "TEST", BASE_CFG, _conn(),
-        spot=60.0,          # above price_max=45
-        quotes=_quotes(spot=60.0), closes=_closes(spot=60.0),
+        spot=4.0,           # below price_min=5
+        quotes=_quotes(spot=4.0), closes=_closes(spot=4.0),
         gex_profile=_profile(), asof=ASOF,
         iv_rank_val=70.0, vrp_val=0.10,
     )
     assert not report.passed
     assert report.checks["price_range"] is False
-    # other structurally-independent checks still evaluated
     assert "iv_rank" in report.checks
+
+
+def test_high_spot_passes_when_no_price_max():
+    report = run_filters(
+        "TEST", BASE_CFG, _conn(),
+        spot=60.0,
+        quotes=_quotes(spot=60.0), closes=_closes(spot=60.0),
+        gex_profile=_profile(), asof=ASOF,
+        iv_rank_val=70.0, vrp_val=0.10,
+    )
+    assert report.checks["price_range"] is True
 
 
 def test_none_iv_rank_fails_gate_but_is_reported():

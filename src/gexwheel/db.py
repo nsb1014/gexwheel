@@ -25,13 +25,21 @@ def _is_remote(url: str) -> bool:
 def connect(db_path: str) -> sqlite3.Connection:
     """Open the DB. A libsql/Turso URL (via TURSO_DATABASE_URL or db_path) routes
     to the libsql adapter; anything else uses stdlib sqlite3 (local/dev/tests)."""
-    url = os.environ.get("TURSO_DATABASE_URL") or db_path
+    turso_url = (os.environ.get("TURSO_DATABASE_URL") or "").strip()
+    url = turso_url or db_path
     if _is_remote(url):
         from .db_libsql import LibsqlConnection
         conn = LibsqlConnection(url, os.environ.get("TURSO_AUTH_TOKEN"))
         conn.executescript(_SCHEMA.read_text())
         _apply_migrations(conn)
         return conn
+
+    if db_path.startswith("/data/") and not turso_url:
+        raise RuntimeError(
+            "TURSO_DATABASE_URL is not set; production db_path requires Turso. "
+            "Add TURSO_DATABASE_URL and TURSO_AUTH_TOKEN as GitHub repo secrets "
+            "(see deploy/INSTALL.md)."
+        )
 
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
@@ -175,6 +183,24 @@ def set_app_state(conn: sqlite3.Connection, key: str, value: str) -> None:
            ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
         (key, value),
     )
+
+
+def morning_spot0_key(asof: date) -> str:
+    return f"morning_spot0_{asof.isoformat()}"
+
+
+def set_morning_spot0(conn: sqlite3.Connection, asof: date, spots: dict[str, float], captured_at: str) -> None:
+    set_app_state(conn, morning_spot0_key(asof), json.dumps({"captured_at": captured_at, "spots": spots}))
+
+
+def get_morning_spot0(conn: sqlite3.Connection, asof: date) -> dict[str, float]:
+    raw = get_app_state(conn, morning_spot0_key(asof))
+    if not raw:
+        return {}
+    try:
+        return {k: float(v) for k, v in json.loads(raw).get("spots", {}).items()}
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return {}
 
 
 # ---------- primary watchlist ----------

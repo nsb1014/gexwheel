@@ -31,8 +31,8 @@ screen:                          # periodic primary-watchlist screen
   min_avg_volume: 1000000        # NEW gate: avg daily shares
 
 filters:                         # Stage 2 - hard gate, no overrides
-  price_min: 10.0
-  price_max: 45.0                # collateral fit for ~$26k account; raise as account grows
+  price_min: 5.0                 # pipeline floor (penny/illiquid names)
+  price_max: null                # no pipeline cap; user sets max on the dashboard
   min_open_interest: 1000        # near-the-money strikes
   max_spread_pct: 0.05           # bid-ask / mid on ATM options
   min_iv_rank: 50.0
@@ -44,8 +44,11 @@ filters:                         # Stage 2 - hard gate, no overrides
   require_positive_regime: false # if true, only alert in positive net gamma
 
 alerts:
-  put_wall_proximity_pct: 0.03   # alert when spot within 3% of put wall
+  within_implied_move_fraction: 0.30  # alert when (spot-wall)/spot <= this × ATM implied move
   wall_persistence_days: 2       # wall must hold same strike N consecutive days
   cooldown_days: 5               # bench ticker after spot closes below its put wall
+  # Two-phase morning (ET): morning-snapshot @ 10:15 (spot₀), morning @ 10:45 (spot₁ + options)
+  max_move_since_spot0_im_fraction: 0.50   # block if |spot₁-spot₀|/spot₀ > this × implied move
+  require_spot0_snapshot: false            # if true, skip identify when spot₀ missing
 
 timezone: America/New_York

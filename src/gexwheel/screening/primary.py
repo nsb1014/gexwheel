@@ -14,6 +14,7 @@ from ..analytics.vol import atm_iv, realized_vol
 from ..data.prices import avg_volume
 from ..models import OptionQuote, PrimaryScreenReport
 from .chain_metrics import atm_call_spread, near_oi_sum
+from .filters import check_price_range
 
 
 def run_primary_screen(symbol: str, cfg: dict, *, spot: float,
@@ -26,8 +27,8 @@ def run_primary_screen(symbol: str, cfg: dict, *, spot: float,
     checks: dict[str, bool] = {}
     values: dict[str, object] = {}
 
-    # price_range
-    checks["price_range"] = f["price_min"] <= spot <= f["price_max"]
+    # price_range (pipeline floor; no max by default — see web/UI-REQUIREMENTS.md)
+    checks["price_range"] = check_price_range(spot, f["price_min"], f.get("price_max"))
     values["spot"] = spot
 
     # avg_volume (NEW gate)

@@ -1,33 +1,8 @@
-"""Weekday pre-market job (~07:15 ET).
+"""Weekday intraday identify job (~10:45 ET).
 
-run(cfg) -> None
-  Candidates = union of:
-    a) db.watchlist_active(conn)
-    b) tickers rows where excluded=0 AND cooldown ok AND symbol not in
-       watchlist  (i.e. fresh discovery output awaiting Stage-2 evaluation)
-
-  Per symbol (wrap the WHOLE per-symbol block in try/except - one bad
-  ticker must never kill the run; log ERROR with symbol and continue):
-    1. spot, quotes = chain_source.fetch(symbol, asof, max_dte)
-    2. closes = prices.daily_closes(symbol)
-    3. profile = analytics.gex.compute_profile(...); db.record_gex(profile)
-    4. iv = vol.atm_iv(quotes, spot, asof); rv = vol.realized_vol(closes)
-       ivr = vol.iv_rank(iv, <trailing iv_atm from vol_stats table>)
-       vrp = iv - rv if iv is not None else None; store row in vol_stats
-    5. refresh earnings table if stale (> 7 days old)
-    6. report = filters.run_filters(...)
-       - candidate (b) + passed  -> db.watchlist_add()
-       - watchlist member + FAILED on structural checks (price_range,
-         sector, blocklist) -> set watchlist status='removed'
-       - transient fails (iv_rank None, spread no_quote) -> keep, log
-    7. Wall-break check: if profile.put_wall and spot < put_wall:
-         db.bench_ticker(symbol, asof + cooldown_days, 'closed below put wall')
-         continue
-    8. if report.passed and scoring.should_alert(profile, cfg, conn, asof):
-         build AlertCard (suggested_entry per scoring docstring), collect
-
-  Finally: persist every identified trade to the alerts table (the dashboard
-  reads them); commit; one INFO summary line; close.
+Spot₀ is captured at ~10:15 by jobs/morning_snapshot.py (equity only).
+This job pulls option chains at spot₁, session low, GEX, filters, and identifies
+trades subject to freshness gates (move since spot₀, session low vs put wall).
 """
 from __future__ import annotations
 
@@ -36,13 +11,14 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from .. import db as gdb
+from ..alerts.freshness import identification_block_reason
 from ..alerts.scoring import score, should_alert
 from ..alerts.scoring import suggested_entry as make_entry
 from ..analytics import gex as gex_mod
 from ..analytics import vol as vol_mod
 from ..analytics.gex import put_wall_strength
 from ..data.chains import make_chain_source
-from ..data.prices import daily_closes, next_earnings, sector
+from ..data.prices import PriceFetchError, daily_closes, next_earnings, sector, session_low
 from ..models import AlertCard, FilterReport
 from ..screening.filters import run_filters
 
@@ -64,6 +40,11 @@ def run(cfg: dict) -> None:
     data_cfg = cfg["data"]
     alert_cfg = cfg["alerts"]
     cooldown_days = alert_cfg.get("cooldown_days", 5)
+    spot0_map = gdb.get_morning_spot0(conn, asof)
+    if not spot0_map:
+        log.warning("morning: no spot0 snapshot for %s — move-since-spot0 gate skipped", asof)
+    else:
+        log.info("morning: loaded spot0 for %d symbols", len(spot0_map))
 
     # Candidates = the active (secondary) watchlist only. Structural entry-gating
     # now lives in the periodic screen (jobs/screen.py); discovery promotes names
@@ -78,7 +59,7 @@ def run(cfg: dict) -> None:
         try:
             _process_symbol(
                 symbol, asof, conn, chain_src, cfg, data_cfg,
-                cooldown_days, cards, alert_payloads
+                cooldown_days, spot0_map, cards, alert_payloads
             )
         except Exception as exc:
             log.error("morning: unhandled error for %s: %s", symbol, exc, exc_info=True)
@@ -96,18 +77,25 @@ def run(cfg: dict) -> None:
 
 
 def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
-                    cooldown_days, cards, alert_payloads):
+                    cooldown_days, spot0_map, cards, alert_payloads):
     """Per-symbol processing block. All exceptions bubble to the caller's handler."""
 
-    # 1. Fetch chain
-    spot, quotes = chain_src.fetch(symbol, asof, data_cfg["max_dte"])
+    # 1. Fetch chain (spot₁ + options at identify time)
+    spot1, quotes = chain_src.fetch(symbol, asof, data_cfg["max_dte"])
+    spot0 = spot0_map.get(symbol)
+
+    session_low_val: float | None = None
+    try:
+        session_low_val = session_low(symbol)
+    except PriceFetchError as exc:
+        log.warning("morning: %s session low unavailable: %s", symbol, exc)
 
     # 2. Fetch closes
     closes = daily_closes(symbol)
 
     # 3. GEX profile
     profile = gex_mod.compute_profile(
-        symbol, quotes, spot, asof,
+        symbol, quotes, spot1, asof,
         r=data_cfg.get("risk_free_rate", 0.045),
         max_dte=data_cfg["max_dte"],
     )
@@ -119,7 +107,7 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
     except ValueError:
         rv = None
 
-    iv = vol_mod.atm_iv(quotes, spot, asof)
+    iv = vol_mod.atm_iv(quotes, spot1, asof)
 
     # Pull iv history from vol_stats
     iv_history_rows = conn.execute(
@@ -147,7 +135,7 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
     # 6. Run Stage-2 filters
     report = run_filters(
         symbol, cfg, conn,
-        spot=spot, quotes=quotes, closes=closes,
+        spot=spot1, quotes=quotes, closes=closes,
         gex_profile=profile, asof=asof,
         iv_rank_val=ivr, vrp_val=vrp,
     )
@@ -156,26 +144,48 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
     # Promote/demote watchlist membership
     _update_watchlist_membership(symbol, report, conn, asof)
 
-    # 7. Wall-break check
-    if profile.put_wall is not None and spot < profile.put_wall:
-        bench_until = asof + timedelta(days=cooldown_days)
-        gdb.bench_ticker(conn, symbol, bench_until, "closed below put wall")
-        log.warning("morning: %s benched until %s (below put wall %.2f)", symbol, bench_until, profile.put_wall)
+    # 7. Wall-break: session low or spot₁ below put wall
+    if profile.put_wall is not None:
+        if session_low_val is not None and session_low_val < profile.put_wall:
+            bench_until = asof + timedelta(days=cooldown_days)
+            gdb.bench_ticker(conn, symbol, bench_until, "session low below put wall")
+            log.warning(
+                "morning: %s benched until %s (session low %.2f < put wall %.2f)",
+                symbol, bench_until, session_low_val, profile.put_wall,
+            )
+            return
+        if spot1 < profile.put_wall:
+            bench_until = asof + timedelta(days=cooldown_days)
+            gdb.bench_ticker(conn, symbol, bench_until, "closed below put wall")
+            log.warning("morning: %s benched until %s (below put wall %.2f)", symbol, bench_until, profile.put_wall)
+            return
+
+    implied_move = vol_mod.implied_move_pct(quotes, spot1, asof)
+    block = identification_block_reason(
+        spot0=spot0,
+        spot1=spot1,
+        session_low=session_low_val,
+        put_wall=profile.put_wall,
+        implied_move_pct=implied_move,
+        cfg=cfg,
+    )
+    if block:
+        log.info("morning: %s identification blocked (%s)", symbol, block)
         return
 
-    # 8. Alert
-    if report.passed and should_alert(profile, cfg, conn, asof):
+    # 8. Identify trade
+    if report.passed and should_alert(profile, cfg, conn, asof, implied_move_pct=implied_move):
         # NOTE: velocity context follows the configured discovery source;
         # 'both' falls back to apewisdom (the primary).
         mention_source = "praw" if cfg["reddit"].get("source") == "praw" else "apewisdom"
         vel_ratio = _velocity_ratio(conn, symbol, asof, mention_source)
 
-        card_score = score(profile, ivr, vrp, vel_ratio)
+        card_score = score(profile, ivr, vrp, vel_ratio, implied_move_pct=implied_move, cfg=cfg)
         strength = put_wall_strength(profile)
         card = AlertCard(
             symbol=symbol,
             alert_type="put_wall_entry",
-            spot=spot,
+            spot=spot1,
             put_wall=profile.put_wall,
             call_wall=profile.call_wall,
             zero_gamma=profile.zero_gamma,
@@ -183,12 +193,17 @@ def _process_symbol(symbol, asof, conn, chain_src, cfg, data_cfg,
             iv_rank=ivr,
             vrp=vrp,
             score=card_score,
-            suggested_entry=make_entry(profile),
+            suggested_entry=make_entry(profile, implied_move),
             notes=_alert_notes(profile, report),
         )
         cards.append(card)
         alert_payloads[(card.symbol, card.alert_type)] = _alert_payload(
-            card, put_wall_strength_val=strength
+            card,
+            put_wall_strength_val=strength,
+            spot0=spot0,
+            spot1=spot1,
+            session_low=session_low_val,
+            implied_move_pct=implied_move,
         )
         log.info("morning: %s generated alert score=%.1f", symbol, card_score)
 
@@ -261,7 +276,15 @@ def _alert_notes(profile, report: FilterReport) -> str:
     return " · ".join(notes)
 
 
-def _alert_payload(card: AlertCard, put_wall_strength_val: float | None) -> dict:
+def _alert_payload(
+    card: AlertCard,
+    *,
+    put_wall_strength_val: float | None,
+    spot0: float | None = None,
+    spot1: float | None = None,
+    session_low: float | None = None,
+    implied_move_pct: float | None = None,
+) -> dict:
     payload = {
         "spot": card.spot,
         "put_wall": card.put_wall,
@@ -271,6 +294,14 @@ def _alert_payload(card: AlertCard, put_wall_strength_val: float | None) -> dict
     }
     if put_wall_strength_val is not None:
         payload["put_wall_strength"] = round(put_wall_strength_val, 4)
+    if spot0 is not None:
+        payload["spot0"] = round(spot0, 4)
+    if spot1 is not None:
+        payload["spot1"] = round(spot1, 4)
+    if session_low is not None:
+        payload["session_low"] = round(session_low, 4)
+    if implied_move_pct is not None:
+        payload["implied_move_pct"] = round(implied_move_pct, 4)
     return payload
 
 
